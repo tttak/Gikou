@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou 20160606";
+const auto kProgramName = "Gikou AperyEvalMix 20160803";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -214,6 +214,10 @@ void ExecuteCommand(const std::string& command, Node* const node,
   } else if (type == "isready") {
     thinking->Initialize();
     Evaluation::ReadParametersFromFile("params.bin");
+
+    // Aperyの評価関数ファイルの読込み
+    AperyEval::LoadEval();
+
     SYNCED_PRINTF("readyok\n");
 
   } else if (type == "setoption") {
@@ -246,6 +250,10 @@ void ExecuteCommand(const std::string& command, Node* const node,
     }
     SYNCED_PRINTF("%s\n", sfen_moves.c_str());
 #endif
+
+  } else if (command == "eval") {
+    // 評価値の詳細情報を標準出力へ出力する
+    Evaluation::Print(*node);
 
   } else {
     SYNCED_PRINTF("info string Unsupported Command: %s\n", command.c_str());
@@ -334,6 +342,14 @@ UsiOptions::UsiOptions() {
 
   // 勝ち数が少ない定跡を除外する場合はtrue
   map_.emplace("TinyBook", UsiOption(false));
+
+  // Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+  map_.emplace("Z01_AperyEvalJoban" , UsiOption(50, 0, 100));
+  map_.emplace("Z02_AperyEvalChuban", UsiOption(50, 0, 100));
+  map_.emplace("Z03_AperyEvalShuban", UsiOption(50, 0, 100));
+
+  // Aperyの評価関数バイナリのフォルダ
+  map_.emplace("Z04_AperyEvalFolder", UsiOption("./Apery_20160307", 0));
 }
 
 void UsiOptions::PrintListOfOptions() {
@@ -358,6 +374,13 @@ void UsiOptions::PrintListOfOptions() {
                     option.default_value(),
                     option.min(),
                     option.max());
+
+    // USIオプションの「string」に対応
+    } else if (option.type() == UsiOption::kString) {
+      SYNCED_PRINTF("option name %s type string default %s\n",
+                    name.c_str(),
+                    option.str_default_value().c_str());
     }
+
   }
 }

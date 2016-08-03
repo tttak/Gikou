@@ -121,6 +121,23 @@ Score Node::Evaluate(double* const progress) {
   }
 #endif
 
+// デバッグ用
+#if 0
+  if (score != Evaluation::Evaluate(*this)) {
+    printf("score != Evaluation::Evaluate(*this)\n");
+    printf("score=%d\n", score);
+    printf("Evaluation::Evaluate(*this)=%d\n", Evaluation::Evaluate(*this));
+    printf("(*this).last_move()=%s\n", (*this).last_move().ToSfen().c_str());
+    printf("(*this).last_move().piece()=%s\n", (*this).last_move().piece().ToSfen().c_str());
+    printf("(*this).last_move().is_drop()=%d\n", (*this).last_move().is_drop());
+    printf("(*this).last_move().is_capture()=%d\n", (*this).last_move().is_capture());
+    printf("(*this).last_move().captured_piece()=%s\n", (*this).last_move().captured_piece().ToSfen().c_str());
+    (*this).Print();
+
+    exit(EXIT_FAILURE);
+  }
+#endif
+
   return score;
 }
 

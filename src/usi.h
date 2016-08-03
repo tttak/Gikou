@@ -49,6 +49,8 @@ class UsiOption {
 
   enum Type {
     kNoType, kCheck, kSpin,
+    // stringに対応
+    kString
   };
 
   /**
@@ -95,6 +97,20 @@ class UsiOption {
   }
 
   /**
+   * USIオプション（string）のコンストラクタです.
+   * @param default_value USIオプションの初期値
+   * @param dummy ダミー値
+   */
+  UsiOption(std::string default_value, int dummy)
+      : str_value_(default_value),
+        str_default_value_(default_value),
+        default_value_(0),
+        min_(0),
+        max_(1),
+        type_(kString) {
+  }
+
+  /**
    * USIオプションの値を設定します.
    */
   UsiOption& operator=(const std::string& value) {
@@ -102,6 +118,9 @@ class UsiOption {
       value_ = static_cast<int>(value == "true");
     } else if (type_ == kSpin) {
       value_ = std::min(std::max(std::stoi(value), min_), max_);
+    } else if (type_ == kString) {
+      str_value_ = value;
+      value_ = 0;
     }
     return *this;
   }
@@ -112,6 +131,14 @@ class UsiOption {
 
   int default_value() const {
     return default_value_;
+  }
+
+  std::string str_default_value() const {
+    return str_default_value_;
+  }
+
+  std::string str_value() const {
+    return str_value_;
   }
 
   int min() const {
@@ -129,6 +156,8 @@ class UsiOption {
  private:
   int value_;
   const int default_value_, min_, max_;
+  std::string str_value_;
+  std::string str_default_value_;
   const Type type_;
 };
 

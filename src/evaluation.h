@@ -67,6 +67,84 @@ constexpr int32_t kFvScale = 1 << 16;
 typedef Pack<int32_t, 4> PackedScore;
 
 /**
+ * Aperyの評価値の詳細を保存するためのクラスです.
+ */
+struct AperyEvalDetail {
+
+  AperyEvalDetail() {
+    Clear();
+  }
+
+  void Clear() {
+    std::memset(this, 0, sizeof(*this));
+  }
+
+  AperyEvalDetail operator+(const AperyEvalDetail& rhs) const {
+    return AperyEvalDetail(*this) += rhs;
+  }
+
+  AperyEvalDetail operator-(const AperyEvalDetail& rhs) const {
+    return AperyEvalDetail(*this) -= rhs;
+  }
+
+  AperyEvalDetail& operator+=(const AperyEvalDetail& rhs) {
+    material += rhs.material;
+    kk_board += rhs.kk_board;
+    kk_turn += rhs.kk_turn;
+    kkp_board += rhs.kkp_board;
+    kkp_turn += rhs.kkp_turn;
+    kpp_board[kBlack] += rhs.kpp_board[kBlack];
+    kpp_turn [kBlack] += rhs.kpp_turn [kBlack];
+    kpp_board[kWhite] += rhs.kpp_board[kWhite];
+    kpp_turn [kWhite] += rhs.kpp_turn [kWhite];
+
+    return *this;
+  }
+
+  AperyEvalDetail& operator-=(const AperyEvalDetail& rhs) {
+    material -= rhs.material;
+    kk_board -= rhs.kk_board;
+    kk_turn -= rhs.kk_turn;
+    kkp_board -= rhs.kkp_board;
+    kkp_turn -= rhs.kkp_turn;
+    kpp_board[kBlack] -= rhs.kpp_board[kBlack];
+    kpp_turn [kBlack] -= rhs.kpp_turn [kBlack];
+    kpp_board[kWhite] -= rhs.kpp_board[kWhite];
+    kpp_turn [kWhite] -= rhs.kpp_turn [kWhite];
+
+    return *this;
+  }
+
+  /**
+   * Aperyの評価値を計算します.
+   * @param side_to_move 手番
+   * @return Aperyの評価値（手番側から見た評価値）
+   */
+  int32_t Sum(const Color side_to_move) const;
+
+  /**
+   * Aperyの評価値の情報を標準出力へ出力します.
+   * @param side_to_move 手番
+   */
+  void Print(const Color side_to_move) const;
+
+  /** 駒割りに関する評価値. */
+  int32_t material;
+
+  /** KK（King-King）に関する評価値（駒の位置、手番）. */
+  int32_t kk_board;
+  int32_t kk_turn;
+
+  /** KKP（King-King-Piece）に関する評価値（駒の位置、手番）. */
+  int32_t kkp_board;
+  int32_t kkp_turn;
+
+  /** KPP（King-Piece-Piece）に関する評価値（駒の位置、手番）. */
+  int32_t kpp_board[2];
+  int32_t kpp_turn [2];
+};
+
+/**
  * 評価値の詳細を保存するためのクラスです.
  * このように評価値の項目を細かく分類しておくと、必要な項目だけ差分計算することができるという利点があります。
  */
@@ -86,6 +164,7 @@ struct EvalDetail {
     two_pieces  += rhs.two_pieces;
     king_safety += rhs.king_safety;
     sliders     += rhs.sliders;
+    apery_eval_detail += rhs.apery_eval_detail;
     return *this;
   }
 
@@ -96,6 +175,7 @@ struct EvalDetail {
     two_pieces  -= rhs.two_pieces;
     king_safety -= rhs.king_safety;
     sliders     -= rhs.sliders;
+    apery_eval_detail -= rhs.apery_eval_detail;
     return *this;
   }
 
@@ -106,6 +186,12 @@ struct EvalDetail {
    * @return 進行度と手番を考慮した、最終的な得点
    */
   Score ComputeFinalScore(Color side_to_move, double* progress_output = nullptr) const;
+
+  /**
+   * 評価値の詳細情報を標準出力へ出力します.
+   * @param side_to_move 手番
+   */
+  void Print(Color side_to_move) const;
 
   /** KP（King-Piece）に関する評価値. */
   ArrayMap<PackedScore, Color> kp{PackedScore(0), PackedScore(0)};
@@ -121,6 +207,9 @@ struct EvalDetail {
 
   /** 飛び駒に関する評価値. */
   PackedScore sliders{0};
+
+  /** Aperyの評価値. */
+  AperyEvalDetail apery_eval_detail;
 };
 
 /**
@@ -164,6 +253,12 @@ class Evaluation {
                                        const PsqControlList& previous_list,
                                        const PsqControlList& current_list,
                                        PsqList* psq_list);
+
+  /**
+   * 評価値の詳細情報を標準出力へ出力します.
+   * @param pos 評価値を計算したい局面
+   */
+  static void Print(const Position& pos);
 };
 
 /**
@@ -231,5 +326,83 @@ struct EvalParameters {
  * evaluation.ccのみならず、学習用のコード（learning.cc等）でも使用するので、extern宣言を付けています。
  */
 extern std::unique_ptr<EvalParameters> g_eval_params;
+
+
+/**
+ * Aperyの評価値関連
+ */
+namespace AperyEval {
+
+  /** KP、KPP、KKPのスケール */
+  const int FV_SCALE = 32;
+
+  /** Aperyの駒割り */
+  enum {
+    PawnValue = 90,
+    LanceValue = 315,
+    KnightValue = 405,
+    SilverValue = 495,
+    GoldValue = 540,
+    BishopValue = 855,
+    RookValue = 990,
+    ProPawnValue = 540,
+    ProLanceValue = 540,
+    ProKnightValue = 540,
+    ProSilverValue = 540,
+    HorseValue = 945,
+    DragonValue = 1395,
+    KingValue = 15000,
+  };
+
+  /** 駒の位置、手番 */
+  enum {
+      kBoard
+    , kTurn
+  };
+
+  /**
+   * 評価関数ファイルを読み込みます.
+   */
+  void LoadEval();
+
+  /**
+   * すべての評価項目について、評価値を計算します（全計算）.
+   * @param pos      評価値を計算したい局面
+   * @param psq_list 駒の位置のインデックスのリスト
+   * @return 評価項目ごとの評価値
+   */
+  AperyEvalDetail ComputeEval(const Position& pos, const PsqList& list);
+
+  /**
+   * 駒割りを全計算します.
+   * @param pos 評価値を計算したい局面
+   * @return 駒割りの評価値
+   */
+  Score EvaluateMaterial(const Position& pos);
+
+  /**
+   * 駒割りを差分計算します.
+   * @param pos 評価値を計算したい局面
+   * @return 駒割りの評価値の差分
+   */
+  Score EvaluateDifferenceOfMaterial(const Position& pos);
+
+  /**
+   * Aperyの生の評価値を１歩＝１００点（centipawn）の評価値に変換します.
+   * @param value 生の評価値
+   * @return １歩＝１００点（centipawn）の評価値
+   */
+  double ToCentiPawn(const int32_t value);
+
+  /**
+   * Aperyの生の評価値を１歩＝１００点（centipawn）の評価値（手番側から見た評価値）に変換します.
+   * @param value 生の評価値
+   * @param side_to_move 手番
+   * @return １歩＝１００点（centipawn）の評価値（手番側から見た評価値）
+   */
+  double ToCentiPawn(const int32_t value, const Color side_to_move);
+
+
+} // namespace
 
 #endif /* EVALUATION_H_ */

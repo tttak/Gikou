@@ -292,3 +292,146 @@ PsqControlList::BitSet128 PsqControlList::ComputeDifference(const PsqControlList
 
   return bitset;
 }
+
+
+/** Apery評価関数用のPsqIndexへの変換テーブル. */
+int apery_psq_index_array[2110];
+
+int GetAperyPsqIndex(PsqIndex psq_index) {
+  return apery_psq_index_array[psq_index];
+}
+
+void SetAperyPsqIndexArray(int gikou_index_start, int apery_index_start, int cnt) {
+  int gikou_index = gikou_index_start;
+  int apery_index = apery_index_start;
+
+  for (int i = 0; i < cnt; i++) {
+    apery_psq_index_array[gikou_index] = apery_index;
+
+    gikou_index++;
+    apery_index++;
+  }
+}
+
+void InitAperyPsqIndexArray() {
+
+  // 技巧とAperyのPsqIndexの持ち方の違いに注意しながら、変換テーブルを初期化する。
+  // ・技巧 ：0～2109
+  // ・Apery：0～1547
+  // ・技巧はインデックスに隙間なし、Aperyは隙間あり。
+  // ・技巧は「と～成銀」を「金」と区別するが、Aperyは区別しない。
+  // ・技巧は「行きどころのない駒」を除外しているが、Aperyは除外していない。
+  // ・盤上の駒の順序が異なる。
+
+
+  // ----- 持ち駒
+  SetAperyPsqIndexArray(0, 1, 18);
+  SetAperyPsqIndexArray(18, 39, 4);
+  SetAperyPsqIndexArray(22, 49, 4);
+  SetAperyPsqIndexArray(26, 59, 4);
+  SetAperyPsqIndexArray(30, 69, 4);
+  SetAperyPsqIndexArray(34, 79, 2);
+  SetAperyPsqIndexArray(36, 85, 2);
+  SetAperyPsqIndexArray(38, 20, 18);
+  SetAperyPsqIndexArray(56, 44, 4);
+  SetAperyPsqIndexArray(60, 54, 4);
+  SetAperyPsqIndexArray(64, 64, 4);
+  SetAperyPsqIndexArray(68, 74, 4);
+  SetAperyPsqIndexArray(72, 82, 2);
+  SetAperyPsqIndexArray(74, 88, 2);
+
+
+  // ----- 盤上の駒
+
+  // 先手の歩
+  SetAperyPsqIndexArray(76, 91, 8);
+  SetAperyPsqIndexArray(84, 100, 8);
+  SetAperyPsqIndexArray(92, 109, 8);
+  SetAperyPsqIndexArray(100, 118, 8);
+  SetAperyPsqIndexArray(108, 127, 8);
+  SetAperyPsqIndexArray(116, 136, 8);
+  SetAperyPsqIndexArray(124, 145, 8);
+  SetAperyPsqIndexArray(132, 154, 8);
+  SetAperyPsqIndexArray(140, 163, 8);
+
+  // 先手の香
+  SetAperyPsqIndexArray(148, 253, 8);
+  SetAperyPsqIndexArray(156, 262, 8);
+  SetAperyPsqIndexArray(164, 271, 8);
+  SetAperyPsqIndexArray(172, 280, 8);
+  SetAperyPsqIndexArray(180, 289, 8);
+  SetAperyPsqIndexArray(188, 298, 8);
+  SetAperyPsqIndexArray(196, 307, 8);
+  SetAperyPsqIndexArray(204, 316, 8);
+  SetAperyPsqIndexArray(212, 325, 8);
+
+  // 先手の桂
+  SetAperyPsqIndexArray(220, 416, 7);
+  SetAperyPsqIndexArray(227, 425, 7);
+  SetAperyPsqIndexArray(234, 434, 7);
+  SetAperyPsqIndexArray(241, 443, 7);
+  SetAperyPsqIndexArray(248, 452, 7);
+  SetAperyPsqIndexArray(255, 461, 7);
+  SetAperyPsqIndexArray(262, 470, 7);
+  SetAperyPsqIndexArray(269, 479, 7);
+  SetAperyPsqIndexArray(276, 488, 7);
+
+  // 先手の銀～飛、と～龍
+  SetAperyPsqIndexArray(283, 576, 81);
+  SetAperyPsqIndexArray(364, 738, 81);
+  SetAperyPsqIndexArray(445, 900, 81);
+  SetAperyPsqIndexArray(526, 1224, 81);
+  SetAperyPsqIndexArray(607, 738, 81);
+  SetAperyPsqIndexArray(688, 738, 81);
+  SetAperyPsqIndexArray(769, 738, 81);
+  SetAperyPsqIndexArray(850, 738, 81);
+  SetAperyPsqIndexArray(931, 1062, 81);
+  SetAperyPsqIndexArray(1012, 1386, 81);
+
+  // 後手の歩
+  SetAperyPsqIndexArray(1093, 171, 8);
+  SetAperyPsqIndexArray(1101, 180, 8);
+  SetAperyPsqIndexArray(1109, 189, 8);
+  SetAperyPsqIndexArray(1117, 198, 8);
+  SetAperyPsqIndexArray(1125, 207, 8);
+  SetAperyPsqIndexArray(1133, 216, 8);
+  SetAperyPsqIndexArray(1141, 225, 8);
+  SetAperyPsqIndexArray(1149, 234, 8);
+  SetAperyPsqIndexArray(1157, 243, 8);
+
+  // 後手の香
+  SetAperyPsqIndexArray(1165, 333, 8);
+  SetAperyPsqIndexArray(1173, 342, 8);
+  SetAperyPsqIndexArray(1181, 351, 8);
+  SetAperyPsqIndexArray(1189, 360, 8);
+  SetAperyPsqIndexArray(1197, 369, 8);
+  SetAperyPsqIndexArray(1205, 378, 8);
+  SetAperyPsqIndexArray(1213, 387, 8);
+  SetAperyPsqIndexArray(1221, 396, 8);
+  SetAperyPsqIndexArray(1229, 405, 8);
+
+  // 後手の桂
+  SetAperyPsqIndexArray(1237, 495, 7);
+  SetAperyPsqIndexArray(1244, 504, 7);
+  SetAperyPsqIndexArray(1251, 513, 7);
+  SetAperyPsqIndexArray(1258, 522, 7);
+  SetAperyPsqIndexArray(1265, 531, 7);
+  SetAperyPsqIndexArray(1272, 540, 7);
+  SetAperyPsqIndexArray(1279, 549, 7);
+  SetAperyPsqIndexArray(1286, 558, 7);
+  SetAperyPsqIndexArray(1293, 567, 7);
+
+  // 後手の銀～飛、と～龍
+  SetAperyPsqIndexArray(1300, 657, 81);
+  SetAperyPsqIndexArray(1381, 819, 81);
+  SetAperyPsqIndexArray(1462, 981, 81);
+  SetAperyPsqIndexArray(1543, 1305, 81);
+  SetAperyPsqIndexArray(1624, 819, 81);
+  SetAperyPsqIndexArray(1705, 819, 81);
+  SetAperyPsqIndexArray(1786, 819, 81);
+  SetAperyPsqIndexArray(1867, 819, 81);
+  SetAperyPsqIndexArray(1948, 1143, 81);
+  SetAperyPsqIndexArray(2029, 1467, 81);
+
+}
+
