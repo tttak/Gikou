@@ -51,8 +51,8 @@ int main(int argc, char **argv) {
   Material::Init();
   MoveProbability::Init();
 
-  // Apery評価関数用のPsqIndexへの変換テーブルを初期化する
-  InitAperyPsqIndexArray();
+  // やねうら王classic評価関数用のPsqIndexへの変換テーブルを初期化する
+  InitYaneuraOuClassicPsqIndexArray();
 
 #ifdef UNIT_TEST
   // Google Test によるユニットテストを行う

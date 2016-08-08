@@ -28,13 +28,13 @@
 #include "usi.h"
 #include "usi_protocol.h"
 
-// Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-int g_AperyEvalOpening;
-int g_AperyEvalMiddleGame;
-int g_AperyEvalEndGame;
+// やねうら王classicの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+int g_YaneuraOuClassicEvalOpening;
+int g_YaneuraOuClassicEvalMiddleGame;
+int g_YaneuraOuClassicEvalEndGame;
 
-// Aperyの評価関数バイナリのフォルダ
-std::string g_AperyEvalFolder;
+// やねうら王classicの評価関数バイナリのフォルダ
+std::string g_YaneuraOuClassicEvalFolder;
 
 namespace {
 
@@ -52,13 +52,13 @@ void Thinking::Initialize() {
   book_.ReadFromFile(kBookFile);
   shared_data_.hash_table.SetSize(usi_options_["USI_Hash"]);
 
-  // Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-  g_AperyEvalOpening    = usi_options_["Z01_AperyEvalJoban"];
-  g_AperyEvalMiddleGame = usi_options_["Z02_AperyEvalChuban"];
-  g_AperyEvalEndGame    = usi_options_["Z03_AperyEvalShuban"];
+  // やねうら王classicの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+  g_YaneuraOuClassicEvalOpening    = usi_options_["Z11_YaneuraOuClassicEvalJoban"];
+  g_YaneuraOuClassicEvalMiddleGame = usi_options_["Z12_YaneuraOuClassicEvalChuban"];
+  g_YaneuraOuClassicEvalEndGame    = usi_options_["Z13_YaneuraOuClassicEvalShuban"];
 
-  // Aperyの評価関数バイナリのフォルダ
-  g_AperyEvalFolder = usi_options_["Z04_AperyEvalFolder"].str_value();
+  // やねうら王classicの評価関数バイナリのフォルダ
+  g_YaneuraOuClassicEvalFolder = usi_options_["Z14_YaneuraOuClassicEvalFolder"].str_value();
 }
 
 void Thinking::StartNewGame() {

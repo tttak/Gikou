@@ -11,7 +11,7 @@ OwnBook              定跡を使う
 SuddenDeathMargin    切れ負けルール時の余裕(秒)
 Threads              スレッド数
 TinyBook             出現頻度の低い定跡手を選ばない
-Z01_AperyEvalJoban   Aperyの評価値の割合(序盤、%)
-Z02_AperyEvalChuban  Aperyの評価値の割合(中盤、%)
-Z03_AperyEvalShuban  Aperyの評価値の割合(終盤、%)
-Z04_AperyEvalFolder  Apery評価関数バイナリのフォルダ
+Z11_YaneuraOuClassicEvalJoban   やねうら王classicの評価値の割合(序盤、%)
+Z12_YaneuraOuClassicEvalChuban  やねうら王classicの評価値の割合(中盤、%)
+Z13_YaneuraOuClassicEvalShuban  やねうら王classicの評価値の割合(終盤、%)
+Z14_YaneuraOuClassicEvalFolder  やねうら王classic評価関数バイナリのフォルダ

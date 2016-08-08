@@ -294,144 +294,148 @@ PsqControlList::BitSet128 PsqControlList::ComputeDifference(const PsqControlList
 }
 
 
-/** Apery評価関数用のPsqIndexへの変換テーブル. */
-int apery_psq_index_array[2110];
+/** やねうら王classic評価関数用のPsqIndexへの変換テーブル. */
+int yaneuraou_classic_psq_index_array[2110];
 
-int GetAperyPsqIndex(PsqIndex psq_index) {
-  return apery_psq_index_array[psq_index];
+int GetYaneuraOuClassicPsqIndex(PsqIndex psq_index) {
+  return yaneuraou_classic_psq_index_array[psq_index];
 }
 
-void SetAperyPsqIndexArray(int gikou_index_start, int apery_index_start, int cnt) {
+void SetYaneuraOuClassicPsqIndexArray(int gikou_index_start, int yaneuraou_classic_index_start, int cnt) {
   int gikou_index = gikou_index_start;
-  int apery_index = apery_index_start;
+  int yaneuraou_classic_index = yaneuraou_classic_index_start;
 
   for (int i = 0; i < cnt; i++) {
-    apery_psq_index_array[gikou_index] = apery_index;
+    yaneuraou_classic_psq_index_array[gikou_index] = yaneuraou_classic_index;
 
     gikou_index++;
-    apery_index++;
+    yaneuraou_classic_index++;
   }
 }
 
-void InitAperyPsqIndexArray() {
+void InitYaneuraOuClassicPsqIndexArray() {
 
-  // 技巧とAperyのPsqIndexの持ち方の違いに注意しながら、変換テーブルを初期化する。
-  // ・技巧 ：0～2109
-  // ・Apery：0～1547
-  // ・技巧はインデックスに隙間なし、Aperyは隙間あり。
-  // ・技巧は「と～成銀」を「金」と区別するが、Aperyは区別しない。
-  // ・技巧は「行きどころのない駒」を除外しているが、Aperyは除外していない。
+  // 技巧とやねうら王classicのPsqIndexの持ち方の違いに注意しながら、変換テーブルを初期化する。
+  // ・技巧：0～2109
+  // ・やねうら王classic：0～1534
+  // ・技巧はインデックスに隙間なし、やねうら王classicは隙間あり。
+  // ・技巧は「と～成銀」を「金」と区別するが、やねうら王classicは区別しない。
+  // ・技巧は「行きどころのない駒」を除外しているが、やねうら王classicは除外していない。
   // ・盤上の駒の順序が異なる。
 
 
   // ----- 持ち駒
-  SetAperyPsqIndexArray(0, 1, 18);
-  SetAperyPsqIndexArray(18, 39, 4);
-  SetAperyPsqIndexArray(22, 49, 4);
-  SetAperyPsqIndexArray(26, 59, 4);
-  SetAperyPsqIndexArray(30, 69, 4);
-  SetAperyPsqIndexArray(34, 79, 2);
-  SetAperyPsqIndexArray(36, 85, 2);
-  SetAperyPsqIndexArray(38, 20, 18);
-  SetAperyPsqIndexArray(56, 44, 4);
-  SetAperyPsqIndexArray(60, 54, 4);
-  SetAperyPsqIndexArray(64, 64, 4);
-  SetAperyPsqIndexArray(68, 74, 4);
-  SetAperyPsqIndexArray(72, 82, 2);
-  SetAperyPsqIndexArray(74, 88, 2);
+
+  // 先手の歩～飛
+  SetYaneuraOuClassicPsqIndexArray(0, 1, 18);
+  SetYaneuraOuClassicPsqIndexArray(18, 37, 4);
+  SetYaneuraOuClassicPsqIndexArray(22, 45, 4);
+  SetYaneuraOuClassicPsqIndexArray(26, 53, 4);
+  SetYaneuraOuClassicPsqIndexArray(30, 61, 4);
+  SetYaneuraOuClassicPsqIndexArray(34, 69, 2);
+  SetYaneuraOuClassicPsqIndexArray(36, 73, 2);
+
+  // 後手の歩～飛
+  SetYaneuraOuClassicPsqIndexArray(38, 19, 18);
+  SetYaneuraOuClassicPsqIndexArray(56, 41, 4);
+  SetYaneuraOuClassicPsqIndexArray(60, 49, 4);
+  SetYaneuraOuClassicPsqIndexArray(64, 57, 4);
+  SetYaneuraOuClassicPsqIndexArray(68, 65, 4);
+  SetYaneuraOuClassicPsqIndexArray(72, 71, 2);
+  SetYaneuraOuClassicPsqIndexArray(74, 75, 2);
 
 
   // ----- 盤上の駒
 
   // 先手の歩
-  SetAperyPsqIndexArray(76, 91, 8);
-  SetAperyPsqIndexArray(84, 100, 8);
-  SetAperyPsqIndexArray(92, 109, 8);
-  SetAperyPsqIndexArray(100, 118, 8);
-  SetAperyPsqIndexArray(108, 127, 8);
-  SetAperyPsqIndexArray(116, 136, 8);
-  SetAperyPsqIndexArray(124, 145, 8);
-  SetAperyPsqIndexArray(132, 154, 8);
-  SetAperyPsqIndexArray(140, 163, 8);
+  SetYaneuraOuClassicPsqIndexArray(76, 78, 8);
+  SetYaneuraOuClassicPsqIndexArray(84, 87, 8);
+  SetYaneuraOuClassicPsqIndexArray(92, 96, 8);
+  SetYaneuraOuClassicPsqIndexArray(100, 105, 8);
+  SetYaneuraOuClassicPsqIndexArray(108, 114, 8);
+  SetYaneuraOuClassicPsqIndexArray(116, 123, 8);
+  SetYaneuraOuClassicPsqIndexArray(124, 132, 8);
+  SetYaneuraOuClassicPsqIndexArray(132, 141, 8);
+  SetYaneuraOuClassicPsqIndexArray(140, 150, 8);
 
   // 先手の香
-  SetAperyPsqIndexArray(148, 253, 8);
-  SetAperyPsqIndexArray(156, 262, 8);
-  SetAperyPsqIndexArray(164, 271, 8);
-  SetAperyPsqIndexArray(172, 280, 8);
-  SetAperyPsqIndexArray(180, 289, 8);
-  SetAperyPsqIndexArray(188, 298, 8);
-  SetAperyPsqIndexArray(196, 307, 8);
-  SetAperyPsqIndexArray(204, 316, 8);
-  SetAperyPsqIndexArray(212, 325, 8);
+  SetYaneuraOuClassicPsqIndexArray(148, 240, 8);
+  SetYaneuraOuClassicPsqIndexArray(156, 249, 8);
+  SetYaneuraOuClassicPsqIndexArray(164, 258, 8);
+  SetYaneuraOuClassicPsqIndexArray(172, 267, 8);
+  SetYaneuraOuClassicPsqIndexArray(180, 276, 8);
+  SetYaneuraOuClassicPsqIndexArray(188, 285, 8);
+  SetYaneuraOuClassicPsqIndexArray(196, 294, 8);
+  SetYaneuraOuClassicPsqIndexArray(204, 303, 8);
+  SetYaneuraOuClassicPsqIndexArray(212, 312, 8);
 
   // 先手の桂
-  SetAperyPsqIndexArray(220, 416, 7);
-  SetAperyPsqIndexArray(227, 425, 7);
-  SetAperyPsqIndexArray(234, 434, 7);
-  SetAperyPsqIndexArray(241, 443, 7);
-  SetAperyPsqIndexArray(248, 452, 7);
-  SetAperyPsqIndexArray(255, 461, 7);
-  SetAperyPsqIndexArray(262, 470, 7);
-  SetAperyPsqIndexArray(269, 479, 7);
-  SetAperyPsqIndexArray(276, 488, 7);
+  SetYaneuraOuClassicPsqIndexArray(220, 403, 7);
+  SetYaneuraOuClassicPsqIndexArray(227, 412, 7);
+  SetYaneuraOuClassicPsqIndexArray(234, 421, 7);
+  SetYaneuraOuClassicPsqIndexArray(241, 430, 7);
+  SetYaneuraOuClassicPsqIndexArray(248, 439, 7);
+  SetYaneuraOuClassicPsqIndexArray(255, 448, 7);
+  SetYaneuraOuClassicPsqIndexArray(262, 457, 7);
+  SetYaneuraOuClassicPsqIndexArray(269, 466, 7);
+  SetYaneuraOuClassicPsqIndexArray(276, 475, 7);
 
   // 先手の銀～飛、と～龍
-  SetAperyPsqIndexArray(283, 576, 81);
-  SetAperyPsqIndexArray(364, 738, 81);
-  SetAperyPsqIndexArray(445, 900, 81);
-  SetAperyPsqIndexArray(526, 1224, 81);
-  SetAperyPsqIndexArray(607, 738, 81);
-  SetAperyPsqIndexArray(688, 738, 81);
-  SetAperyPsqIndexArray(769, 738, 81);
-  SetAperyPsqIndexArray(850, 738, 81);
-  SetAperyPsqIndexArray(931, 1062, 81);
-  SetAperyPsqIndexArray(1012, 1386, 81);
+  SetYaneuraOuClassicPsqIndexArray(283, 563, 81);
+  SetYaneuraOuClassicPsqIndexArray(364, 725, 81);
+  SetYaneuraOuClassicPsqIndexArray(445, 887, 81);
+  SetYaneuraOuClassicPsqIndexArray(526, 1211, 81);
+  SetYaneuraOuClassicPsqIndexArray(607, 725, 81);
+  SetYaneuraOuClassicPsqIndexArray(688, 725, 81);
+  SetYaneuraOuClassicPsqIndexArray(769, 725, 81);
+  SetYaneuraOuClassicPsqIndexArray(850, 725, 81);
+  SetYaneuraOuClassicPsqIndexArray(931, 1049, 81);
+  SetYaneuraOuClassicPsqIndexArray(1012, 1373, 81);
 
   // 後手の歩
-  SetAperyPsqIndexArray(1093, 171, 8);
-  SetAperyPsqIndexArray(1101, 180, 8);
-  SetAperyPsqIndexArray(1109, 189, 8);
-  SetAperyPsqIndexArray(1117, 198, 8);
-  SetAperyPsqIndexArray(1125, 207, 8);
-  SetAperyPsqIndexArray(1133, 216, 8);
-  SetAperyPsqIndexArray(1141, 225, 8);
-  SetAperyPsqIndexArray(1149, 234, 8);
-  SetAperyPsqIndexArray(1157, 243, 8);
+  SetYaneuraOuClassicPsqIndexArray(1093, 158, 8);
+  SetYaneuraOuClassicPsqIndexArray(1101, 167, 8);
+  SetYaneuraOuClassicPsqIndexArray(1109, 176, 8);
+  SetYaneuraOuClassicPsqIndexArray(1117, 185, 8);
+  SetYaneuraOuClassicPsqIndexArray(1125, 194, 8);
+  SetYaneuraOuClassicPsqIndexArray(1133, 203, 8);
+  SetYaneuraOuClassicPsqIndexArray(1141, 212, 8);
+  SetYaneuraOuClassicPsqIndexArray(1149, 221, 8);
+  SetYaneuraOuClassicPsqIndexArray(1157, 230, 8);
 
   // 後手の香
-  SetAperyPsqIndexArray(1165, 333, 8);
-  SetAperyPsqIndexArray(1173, 342, 8);
-  SetAperyPsqIndexArray(1181, 351, 8);
-  SetAperyPsqIndexArray(1189, 360, 8);
-  SetAperyPsqIndexArray(1197, 369, 8);
-  SetAperyPsqIndexArray(1205, 378, 8);
-  SetAperyPsqIndexArray(1213, 387, 8);
-  SetAperyPsqIndexArray(1221, 396, 8);
-  SetAperyPsqIndexArray(1229, 405, 8);
+  SetYaneuraOuClassicPsqIndexArray(1165, 320, 8);
+  SetYaneuraOuClassicPsqIndexArray(1173, 329, 8);
+  SetYaneuraOuClassicPsqIndexArray(1181, 338, 8);
+  SetYaneuraOuClassicPsqIndexArray(1189, 347, 8);
+  SetYaneuraOuClassicPsqIndexArray(1197, 356, 8);
+  SetYaneuraOuClassicPsqIndexArray(1205, 365, 8);
+  SetYaneuraOuClassicPsqIndexArray(1213, 374, 8);
+  SetYaneuraOuClassicPsqIndexArray(1221, 383, 8);
+  SetYaneuraOuClassicPsqIndexArray(1229, 392, 8);
 
   // 後手の桂
-  SetAperyPsqIndexArray(1237, 495, 7);
-  SetAperyPsqIndexArray(1244, 504, 7);
-  SetAperyPsqIndexArray(1251, 513, 7);
-  SetAperyPsqIndexArray(1258, 522, 7);
-  SetAperyPsqIndexArray(1265, 531, 7);
-  SetAperyPsqIndexArray(1272, 540, 7);
-  SetAperyPsqIndexArray(1279, 549, 7);
-  SetAperyPsqIndexArray(1286, 558, 7);
-  SetAperyPsqIndexArray(1293, 567, 7);
+  SetYaneuraOuClassicPsqIndexArray(1237, 482, 7);
+  SetYaneuraOuClassicPsqIndexArray(1244, 491, 7);
+  SetYaneuraOuClassicPsqIndexArray(1251, 500, 7);
+  SetYaneuraOuClassicPsqIndexArray(1258, 509, 7);
+  SetYaneuraOuClassicPsqIndexArray(1265, 518, 7);
+  SetYaneuraOuClassicPsqIndexArray(1272, 527, 7);
+  SetYaneuraOuClassicPsqIndexArray(1279, 536, 7);
+  SetYaneuraOuClassicPsqIndexArray(1286, 545, 7);
+  SetYaneuraOuClassicPsqIndexArray(1293, 554, 7);
 
   // 後手の銀～飛、と～龍
-  SetAperyPsqIndexArray(1300, 657, 81);
-  SetAperyPsqIndexArray(1381, 819, 81);
-  SetAperyPsqIndexArray(1462, 981, 81);
-  SetAperyPsqIndexArray(1543, 1305, 81);
-  SetAperyPsqIndexArray(1624, 819, 81);
-  SetAperyPsqIndexArray(1705, 819, 81);
-  SetAperyPsqIndexArray(1786, 819, 81);
-  SetAperyPsqIndexArray(1867, 819, 81);
-  SetAperyPsqIndexArray(1948, 1143, 81);
-  SetAperyPsqIndexArray(2029, 1467, 81);
+  SetYaneuraOuClassicPsqIndexArray(1300, 644, 81);
+  SetYaneuraOuClassicPsqIndexArray(1381, 806, 81);
+  SetYaneuraOuClassicPsqIndexArray(1462, 968, 81);
+  SetYaneuraOuClassicPsqIndexArray(1543, 1292, 81);
+  SetYaneuraOuClassicPsqIndexArray(1624, 806, 81);
+  SetYaneuraOuClassicPsqIndexArray(1705, 806, 81);
+  SetYaneuraOuClassicPsqIndexArray(1786, 806, 81);
+  SetYaneuraOuClassicPsqIndexArray(1867, 806, 81);
+  SetYaneuraOuClassicPsqIndexArray(1948, 1130, 81);
+  SetYaneuraOuClassicPsqIndexArray(2029, 1454, 81);
 
 }
 

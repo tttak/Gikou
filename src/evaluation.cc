@@ -30,23 +30,28 @@
 
 std::unique_ptr<EvalParameters> g_eval_params(new EvalParameters);
 
-// Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-extern int g_AperyEvalOpening;
-extern int g_AperyEvalMiddleGame;
-extern int g_AperyEvalEndGame;
+// やねうら王classicの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+extern int g_YaneuraOuClassicEvalOpening;
+extern int g_YaneuraOuClassicEvalMiddleGame;
+extern int g_YaneuraOuClassicEvalEndGame;
 
-// Aperyの評価関数バイナリのフォルダ
-extern std::string g_AperyEvalFolder;
+// やねうら王classicの評価関数バイナリのフォルダ
+extern std::string g_YaneuraOuClassicEvalFolder;
 
-// Aperyの評価関数パラメータ用
-typedef std::array<int32_t, 2> ValueKk;
-typedef std::array<int32_t, 2> ValueKkp;
-typedef std::array<int16_t, 2> ValueKpp;
+// やねうら王classicの評価関数テーブルの要素数など
+const int SQ_NB_PLUS1 = 82;
+const int fe_end = 1535;
+const int fe_hand_end = 77;
 
-// Aperyの評価関数パラメータ
-ValueKk  kk_apery [81][81];
-ValueKkp kkp_apery[81][81][1548];
-ValueKpp kpp_apery[81][1548][1548];
+// やねうら王classicの評価関数パラメータ用
+typedef int32_t ValueKk;
+typedef int32_t ValueKkp;
+typedef int16_t ValueKpp;
+
+// やねうら王classicの評価関数パラメータ（技巧のPsqIndexへの変換後）
+ValueKk  kk_yaneuraou_classic [81][81];
+ValueKkp kkp_yaneuraou_classic[81][81][2110];
+ValueKpp kpp_yaneuraou_classic[81][2110][2110];
 
 
 Score EvalDetail::ComputeFinalScore(Color side_to_move,
@@ -111,33 +116,33 @@ Score EvalDetail::ComputeFinalScore(Color side_to_move,
   double score_gikou = (double)sum / (kScale * static_cast<int64_t>(kFvScale));
   score_gikou = (side_to_move == kBlack ? score_gikou : -score_gikou);
 
-  // Aperyの評価値（double）
-  double score_apery = AperyEval::ToCentiPawn(apery_eval_detail.Sum(side_to_move));
+  // やねうら王classicの評価値（double）
+  double score_yaneuraou_classic = YaneuraOuClassicEval::ToCentiPawn(yaneuraou_classic_eval_detail.Sum(side_to_move));
 
   // 序盤・中盤・終盤の評価値の割合
-  double rate_opening_apery = (double)g_AperyEvalOpening / 100;
-  double rate_opening_gikou = 1 - rate_opening_apery;
+  double rate_opening_yaneuraou_classic = (double)g_YaneuraOuClassicEvalOpening / 100;
+  double rate_opening_gikou = 1 - rate_opening_yaneuraou_classic;
 
-  double rate_middle_game_apery = (double)g_AperyEvalMiddleGame / 100;
-  double rate_middle_game_gikou = 1 - rate_middle_game_apery;
+  double rate_middle_game_yaneuraou_classic = (double)g_YaneuraOuClassicEvalMiddleGame / 100;
+  double rate_middle_game_gikou = 1 - rate_middle_game_yaneuraou_classic;
 
-  double rate_end_game_apery = (double)g_AperyEvalEndGame / 100;
-  double rate_end_game_gikou = 1 - rate_end_game_apery;
+  double rate_end_game_yaneuraou_classic = (double)g_YaneuraOuClassicEvalEndGame / 100;
+  double rate_end_game_gikou = 1 - rate_end_game_yaneuraou_classic;
 
-  // 現在の進行度での技巧、Aperyの評価値の割合
+  // 現在の進行度での技巧、やねうら王classicの評価値の割合
   double rate_gikou = 0;
-  double rate_apery = 0;
+  double rate_yaneuraou_classic = 0;
 
   if (progress_double < 0.5) {
     rate_gikou = (1 - progress_double * 2) * rate_opening_gikou + (progress_double * 2) * rate_middle_game_gikou;
-    rate_apery = (1 - progress_double * 2) * rate_opening_apery + (progress_double * 2) * rate_middle_game_apery;
+    rate_yaneuraou_classic = (1 - progress_double * 2) * rate_opening_yaneuraou_classic + (progress_double * 2) * rate_middle_game_yaneuraou_classic;
   } else {
     rate_gikou = (2 - progress_double * 2) * rate_middle_game_gikou + (progress_double * 2 - 1) * rate_end_game_gikou;
-    rate_apery = (2 - progress_double * 2) * rate_middle_game_apery + (progress_double * 2 - 1) * rate_end_game_apery;
+    rate_yaneuraou_classic = (2 - progress_double * 2) * rate_middle_game_yaneuraou_classic + (progress_double * 2 - 1) * rate_end_game_yaneuraou_classic;
   }
 
   // 最終的な評価値
-  int score_mix = score_gikou * rate_gikou + score_apery * rate_apery;
+  int score_mix = score_gikou * rate_gikou + score_yaneuraou_classic * rate_yaneuraou_classic;
   score_mix = std::max(std::min(score_mix, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
 
   return static_cast<Score>(score_mix);
@@ -189,35 +194,18 @@ inline EvalDetail SumPositionalScore(const PsqPair psq, const PsqList& list,
   }
 
 
-  // 3. AperyのKKPとKPP
+  // 3. やねうら王classicのKKPとKPP
   // ・KKは計算不要。この「特定の１駒」は玉ではないので。
-  AperyEvalDetail apery_eval_detail;
-
-  const Square sq_wk = pos.king_square(kWhite);
-
-  const auto* ppkppb = kpp_apery[bk];
-  const auto* ppkppw = kpp_apery[wk];
-
-  int psq_black = GetAperyPsqIndex(psq.black());
-  int psq_white = GetAperyPsqIndex(psq.white());
+  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
 
   // KKP
-  apery_eval_detail.kkp_board = kkp_apery[bk][sq_wk][psq_black][AperyEval::kBoard];
-  apery_eval_detail.kkp_turn  = kkp_apery[bk][sq_wk][psq_black][AperyEval::kTurn];
-
-  const auto* pkppb = ppkppb[psq_black];
-  const auto* pkppw = ppkppw[psq_white];
+  yaneuraou_classic_eval_detail.kkp_board = kkp_yaneuraou_classic[bk][wk][psq.black()];
 
   for (const PsqPair& j : list) {
     if (j.black() != psq.black()) {
-      int j_black = GetAperyPsqIndex(j.black());
-      int j_white = GetAperyPsqIndex(j.white());
-
       // KPP
-      apery_eval_detail.kpp_board[kBlack] += pkppb[j_black][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kBlack] += pkppb[j_black][AperyEval::kTurn];
-      apery_eval_detail.kpp_board[kWhite] += pkppw[j_white][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kWhite] += pkppw[j_white][AperyEval::kTurn];
+      yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[bk][psq.black()][j.black()];
+      yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[wk][psq.white()][j.white()];
     }
   }
 
@@ -227,7 +215,7 @@ inline EvalDetail SumPositionalScore(const PsqPair psq, const PsqList& list,
   sum.kp[kBlack] = kp_black;
   sum.kp[kWhite] = FlipScores3x1(kp_white);
   sum.two_pieces = two_pieces;
-  sum.apery_eval_detail = apery_eval_detail;
+  sum.yaneuraou_classic_eval_detail = yaneuraou_classic_eval_detail;
 
   return sum;
 }
@@ -256,66 +244,37 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   two_pieces -= g_eval_params->two_pieces[psq1.black()][psq2.black()];
 
 
-  // 4. AperyのKKPとKPP
+  // 4. やねうら王classicのKKPとKPP
   // ・KKは計算不要。この「特定の２駒」は玉ではないので。
-  AperyEvalDetail apery_eval_detail;
-
-  const Square sq_wk = pos.king_square(kWhite);
-
-  const auto* ppkppb = kpp_apery[bk];
-  const auto* ppkppw = kpp_apery[wk];
-
-  int psq1_black = GetAperyPsqIndex(psq1.black());
-  int psq1_white = GetAperyPsqIndex(psq1.white());
-  int psq2_black = GetAperyPsqIndex(psq2.black());
-  int psq2_white = GetAperyPsqIndex(psq2.white());
+  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
 
   // KKP
-  apery_eval_detail.kkp_board = kkp_apery[bk][sq_wk][psq1_black][AperyEval::kBoard]
-                              + kkp_apery[bk][sq_wk][psq2_black][AperyEval::kBoard];
-  apery_eval_detail.kkp_turn  = kkp_apery[bk][sq_wk][psq1_black][AperyEval::kTurn]
-                              + kkp_apery[bk][sq_wk][psq2_black][AperyEval::kTurn];
+  yaneuraou_classic_eval_detail.kkp_board = kkp_yaneuraou_classic[bk][wk][psq1.black()]
+                                          + kkp_yaneuraou_classic[bk][wk][psq2.black()];
 
   // 駒１のKPP
-  const auto* pkppb1 = ppkppb[psq1_black];
-  const auto* pkppw1 = ppkppw[psq1_white];
-
   for (const PsqPair& j : list) {
     if (j.black() != psq1.black()) {
-      int j_black = GetAperyPsqIndex(j.black());
-      int j_white = GetAperyPsqIndex(j.white());
-
       // KPP
-      apery_eval_detail.kpp_board[kBlack] += pkppb1[j_black][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kBlack] += pkppb1[j_black][AperyEval::kTurn];
-      apery_eval_detail.kpp_board[kWhite] += pkppw1[j_white][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kWhite] += pkppw1[j_white][AperyEval::kTurn];
+      yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[bk][psq1.black()][j.black()];
+      yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[wk][psq1.white()][j.white()];
     }
   }
 
   // 駒２のKPP
-  const auto* pkppb2 = ppkppb[psq2_black];
-  const auto* pkppw2 = ppkppw[psq2_white];
-
   for (const PsqPair& j : list) {
     if (j.black() != psq2.black()) {
-      int j_black = GetAperyPsqIndex(j.black());
-      int j_white = GetAperyPsqIndex(j.white());
-
       // KPP
-      apery_eval_detail.kpp_board[kBlack] += pkppb2[j_black][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kBlack] += pkppb2[j_black][AperyEval::kTurn];
-      apery_eval_detail.kpp_board[kWhite] += pkppw2[j_white][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kWhite] += pkppw2[j_white][AperyEval::kTurn];
+      yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[bk][psq2.black()][j.black()];
+      yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[wk][psq2.white()][j.white()];
     }
   }
 
 
-  // 5. AperyのKPP計算で重複して加算されてしまった部分を補正する
-  apery_eval_detail.kpp_board[kBlack] -= ppkppb[psq1_black][psq2_black][AperyEval::kBoard];
-  apery_eval_detail.kpp_turn [kBlack] -= ppkppb[psq1_black][psq2_black][AperyEval::kTurn];
-  apery_eval_detail.kpp_board[kWhite] -= ppkppw[psq1_white][psq2_white][AperyEval::kBoard];
-  apery_eval_detail.kpp_turn [kWhite] -= ppkppw[psq1_white][psq2_white][AperyEval::kTurn];
+  // 5. やねうら王classicのKPP計算で重複して加算されてしまった部分を補正する
+  yaneuraou_classic_eval_detail.kpp_board[kBlack] -= kpp_yaneuraou_classic[bk][psq1.black()][psq2.black()];
+  yaneuraou_classic_eval_detail.kpp_board[kWhite] -= kpp_yaneuraou_classic[wk][psq1.white()][psq2.white()];
+
 
   // -----
 
@@ -323,7 +282,7 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   sum.kp[kBlack] = kp_black;
   sum.kp[kWhite] = FlipScores3x1(kp_white);
   sum.two_pieces = two_pieces;
-  sum.apery_eval_detail = apery_eval_detail;
+  sum.yaneuraou_classic_eval_detail = yaneuraou_classic_eval_detail;
 
   return sum;
 }
@@ -638,72 +597,44 @@ EvalDetail EvaluateDifferenceForKingMove(const Position& pos,
   }
 
 
-  // 3. 移動した玉に関するAperyのKK、KKP、KPPのスコアを再計算する
-  AperyEvalDetail apery_eval_detail;
+  // 3. 移動した玉に関するやねうら王classicのKK、KKP、KPPのスコアを再計算する
+  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
 
   const Square sq_bk = pos.king_square(kBlack);
-  const Square sq_wk = pos.king_square(kWhite);
-  const Square inv_sq_wk = Square::rotate180(sq_wk);
+  const Square inv_sq_wk = Square::rotate180(pos.king_square(kWhite));
 
   // KK
-  apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk][AperyEval::kBoard];
-  apery_eval_detail.kk_turn  = kk_apery[sq_bk][sq_wk][AperyEval::kTurn];
+  yaneuraou_classic_eval_detail.kk_board = kk_yaneuraou_classic[sq_bk][inv_sq_wk];
 
-  diff.apery_eval_detail.kk_board = apery_eval_detail.kk_board - previous_eval.apery_eval_detail.kk_board;
-  diff.apery_eval_detail.kk_turn  = apery_eval_detail.kk_turn  - previous_eval.apery_eval_detail.kk_turn;
+  diff.yaneuraou_classic_eval_detail.kk_board = yaneuraou_classic_eval_detail.kk_board - previous_eval.yaneuraou_classic_eval_detail.kk_board;
 
 
   // KKP
   for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
-    int i_black = GetAperyPsqIndex(i->black());
-
-    // KKP
-    apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i_black][AperyEval::kBoard];
-    apery_eval_detail.kkp_turn  += kkp_apery[sq_bk][sq_wk][i_black][AperyEval::kTurn];
+    yaneuraou_classic_eval_detail.kkp_board += kkp_yaneuraou_classic[sq_bk][inv_sq_wk][i->black()];
   }
 
-  diff.apery_eval_detail.kkp_board = apery_eval_detail.kkp_board - previous_eval.apery_eval_detail.kkp_board;
-  diff.apery_eval_detail.kkp_turn  = apery_eval_detail.kkp_turn  - previous_eval.apery_eval_detail.kkp_turn;
+  diff.yaneuraou_classic_eval_detail.kkp_board = yaneuraou_classic_eval_detail.kkp_board - previous_eval.yaneuraou_classic_eval_detail.kkp_board;
 
 
   // KPP
   if (king_color == kBlack) {
-    const auto* ppkppb = kpp_apery[sq_bk];
-
     for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
-      int i_black = GetAperyPsqIndex(i->black());
-      const auto* pkppb = ppkppb[i_black];
-
       for (const PsqPair* j = list->begin(); j < i; ++j) {
-        int j_black = GetAperyPsqIndex(j->black());
-
-        // KPP
-        apery_eval_detail.kpp_board[kBlack] += pkppb[j_black][AperyEval::kBoard];
-        apery_eval_detail.kpp_turn [kBlack] += pkppb[j_black][AperyEval::kTurn];
+        yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[sq_bk][i->black()][j->black()];
       }
     }
 
-    diff.apery_eval_detail.kpp_board[kBlack] = apery_eval_detail.kpp_board[kBlack] - previous_eval.apery_eval_detail.kpp_board[kBlack];
-    diff.apery_eval_detail.kpp_turn [kBlack] = apery_eval_detail.kpp_turn [kBlack] - previous_eval.apery_eval_detail.kpp_turn [kBlack];
+    diff.yaneuraou_classic_eval_detail.kpp_board[kBlack] = yaneuraou_classic_eval_detail.kpp_board[kBlack] - previous_eval.yaneuraou_classic_eval_detail.kpp_board[kBlack];
 
   } else {
-    const auto* ppkppw = kpp_apery[inv_sq_wk];
-
     for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
-      int i_white = GetAperyPsqIndex(i->white());
-      const auto* pkppw = ppkppw[i_white];
-
       for (const PsqPair* j = list->begin(); j < i; ++j) {
-        int j_white = GetAperyPsqIndex(j->white());
-
-        // KPP
-        apery_eval_detail.kpp_board[kWhite] += pkppw[j_white][AperyEval::kBoard];
-        apery_eval_detail.kpp_turn [kWhite] += pkppw[j_white][AperyEval::kTurn];
+        yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[inv_sq_wk][i->white()][j->white()];
       }
     }
 
-    diff.apery_eval_detail.kpp_board[kWhite] = apery_eval_detail.kpp_board[kWhite] - previous_eval.apery_eval_detail.kpp_board[kWhite];
-    diff.apery_eval_detail.kpp_turn [kWhite] = apery_eval_detail.kpp_turn [kWhite] - previous_eval.apery_eval_detail.kpp_turn [kWhite];
+    diff.yaneuraou_classic_eval_detail.kpp_board[kWhite] = yaneuraou_classic_eval_detail.kpp_board[kWhite] - previous_eval.yaneuraou_classic_eval_detail.kpp_board[kWhite];
   }
 
   return diff;
@@ -797,8 +728,8 @@ EvalDetail Evaluation::EvaluateAll(const Position& pos,
   // 4. 飛車・角・香車の利き
   sum.sliders = EvaluateSlidingPieces(pos);
 
-  // 5. Aperyの評価値（全計算）
-  sum.apery_eval_detail = AperyEval::ComputeEval(pos, psq_list);
+  // 5. やねうら王classicの評価値（全計算）
+  sum.yaneuraou_classic_eval_detail = YaneuraOuClassicEval::ComputeEval(pos, psq_list);
 
   return sum;
 }
@@ -848,8 +779,8 @@ EvalDetail Evaluation::EvaluateDifference(const Position& pos,
   // 3. 飛車・角・香車の利き（末端評価）
   diff.sliders = EvaluateSlidingPieces(pos) - previous_eval.sliders;
 
-  // 4. Aperyの駒割りの差分計算
-  diff.apery_eval_detail.material = AperyEval::EvaluateDifferenceOfMaterial(pos) * AperyEval::FV_SCALE;
+  // 4. やねうら王classicの駒割りの差分計算
+  diff.yaneuraou_classic_eval_detail.material = YaneuraOuClassicEval::EvaluateDifferenceOfMaterial(pos) * YaneuraOuClassicEval::FV_SCALE;
 
   return diff;
 }
@@ -875,9 +806,9 @@ void Evaluation::ReadParametersFromFile(const char* file_name) {
 
 
 /**
- * Aperyの評価値関連
+ * やねうら王classicの評価値関連
  */
-namespace AperyEval {
+namespace YaneuraOuClassicEval {
 
   /** 駒の価値 */
   const int PieceValue[32] = {
@@ -910,89 +841,172 @@ namespace AperyEval {
 } // namespace
 
 
-// Aperyの評価関数ファイルの読込み
-void AperyEval::LoadEval() {
+// やねうら王classicの評価関数ファイルの読込み
+void YaneuraOuClassicEval::LoadEval() {
 
-  // Aperyの評価関数ファイルの読込み（KK）
-  std::string filename_kk = g_AperyEvalFolder + "/KK_synthesized.bin";
-  std::ifstream ifs_kk_apery(filename_kk, std::ios::binary);
-  if (ifs_kk_apery) {
-    ifs_kk_apery.read(reinterpret_cast<char*>(kk_apery), sizeof(kk_apery));
-  }
-  else {
-    std::printf("info string Failed to open %s.\n", filename_kk.c_str());
-    exit(EXIT_FAILURE);
-  }
-
-  // Aperyの評価関数ファイルの読込み（KKP）
-  std::string filename_kkp = g_AperyEvalFolder + "/KKP_synthesized.bin";
-  std::ifstream ifs_kkp_apery(filename_kkp, std::ios::binary);
-  if (ifs_kkp_apery) {
-    ifs_kkp_apery.read(reinterpret_cast<char*>(kkp_apery), sizeof(kkp_apery));
-  }
-  else {
+  //----- やねうら王classicの評価関数ファイルの読込み（KK、KKP）
+  // ・tmp_kkp1へ読み込む
+  std::string filename_kkp = g_YaneuraOuClassicEvalFolder + "/kkp32ap.bin";
+  std::fstream fs_kkp;
+  fs_kkp.open(filename_kkp, std::ios::in | std::ios::binary);
+  if (fs_kkp.fail()) {
     std::printf("info string Failed to open %s.\n", filename_kkp.c_str());
     exit(EXIT_FAILURE);
   }
 
-  // Aperyの評価関数ファイルの読込み（KPP）
-  std::string filename_kpp = g_AperyEvalFolder + "/KPP_synthesized.bin";
-  std::ifstream ifs_kpp_apery(filename_kpp, std::ios::binary);
-  if (ifs_kpp_apery) {
-    ifs_kpp_apery.read(reinterpret_cast<char*>(kpp_apery), sizeof(kpp_apery));
+  // 評価関数ファイルの読込み用
+  int count_kkp = SQ_NB_PLUS1 * SQ_NB_PLUS1 * (fe_end + 1);
+  size_t size_kkp = count_kkp * (int)sizeof(ValueKkp);
+  ValueKkp* tmp_kkp1 = new ValueKkp[size_kkp];
+
+  fs_kkp.read((char*)tmp_kkp1, size_kkp);
+  if (fs_kkp.fail()) {
+    std::printf("info string Failed to read %s.\n", filename_kkp.c_str());
+    delete[] tmp_kkp1;
+    exit(EXIT_FAILURE);
   }
-  else {
+  fs_kkp.close();
+
+
+  //----- やねうら王classicの評価関数ファイルの読込み（KPP）
+  // ・tmp_kpp1へ読み込む
+  std::string filename_kpp = g_YaneuraOuClassicEvalFolder + "/kpp16ap.bin";
+  std::fstream fs_kpp;
+  fs_kpp.open(filename_kpp, std::ios::in | std::ios::binary);
+  if (fs_kpp.fail()) {
     std::printf("info string Failed to open %s.\n", filename_kpp.c_str());
     exit(EXIT_FAILURE);
   }
-}
 
-// Aperyの評価値の全計算
-AperyEvalDetail AperyEval::ComputeEval(const Position& pos, const PsqList& list) {
-  AperyEvalDetail apery_eval_detail;
+  // 評価関数ファイルの読込み用
+  int count_kpp = SQ_NB_PLUS1 * fe_end * fe_end;
+  size_t size_kpp = count_kpp * (int)sizeof(ValueKpp);
+  ValueKpp* tmp_kpp1 = new ValueKpp[size_kpp];
 
-  // 駒割り
-  apery_eval_detail.material = EvaluateMaterial(pos) * FV_SCALE;
+  fs_kpp.read((char*)tmp_kpp1, size_kpp);
+  if (fs_kpp.fail()) {
+    std::printf("info string Failed to read %s.\n", filename_kpp.c_str());
+    delete[] tmp_kkp1;
+    delete[] tmp_kpp1;
+    exit(EXIT_FAILURE);
+  }
+  fs_kpp.close();
 
-  const Square sq_bk = pos.king_square(kBlack);
-  const Square sq_wk = pos.king_square(kWhite);
-  const Square inv_sq_wk = Square::rotate180(sq_wk);
 
-  // KK
-  apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk][AperyEval::kBoard];
-  apery_eval_detail.kk_turn  = kk_apery[sq_bk][sq_wk][AperyEval::kTurn];
+  //----- 持ち駒の添字のコンバート時の間違い対応
+  // ・「tmp_kkp1、tmp_kpp1」から「tmp_kkp2、tmp_kpp2」へ
 
-  const auto* ppkppb = kpp_apery[sq_bk];
-  const auto* ppkppw = kpp_apery[inv_sq_wk];
+  #define TMP_KKP1(k1, k2, p) tmp_kkp1[k1 * SQ_NB_PLUS1 * (fe_end + 1) + k2 * (fe_end + 1) + p]
+  #define TMP_KPP1(k, p1, p2) tmp_kpp1[k * fe_end * fe_end + p1 * fe_end + p2]
 
-  for (const PsqPair* i = list.begin(); i != list.end(); ++i) {
-    int i_black = GetAperyPsqIndex(i->black());
-    int i_white = GetAperyPsqIndex(i->white());
+  #define TMP_KKP2(k1, k2, p) tmp_kkp2[k1 * SQ_NB_PLUS1 * (fe_end + 1) + k2 * (fe_end + 1) + p]
+  #define TMP_KPP2(k, p1, p2) tmp_kpp2[k * fe_end * fe_end + p1 * fe_end + p2]
 
-    // KKP
-    apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i_black][AperyEval::kBoard];
-    apery_eval_detail.kkp_turn  += kkp_apery[sq_bk][sq_wk][i_black][AperyEval::kTurn];
+  ValueKkp* tmp_kkp2 = new ValueKkp[count_kkp];
+  ValueKpp* tmp_kpp2 = new ValueKpp[count_kpp];
 
-    const auto* pkppb = ppkppb[i_black];
-    const auto* pkppw = ppkppw[i_white];
+  memset(tmp_kkp2, 0, size_kkp);
+  memset(tmp_kpp2, 0, size_kpp);
 
-    for (const PsqPair* j = list.begin(); j < i; ++j) {
-      int j_black = GetAperyPsqIndex(j->black());
-      int j_white = GetAperyPsqIndex(j->white());
-
-      // KPP
-      apery_eval_detail.kpp_board[kBlack] += pkppb[j_black][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kBlack] += pkppb[j_black][AperyEval::kTurn];
-      apery_eval_detail.kpp_board[kWhite] += pkppw[j_white][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kWhite] += pkppw[j_white][AperyEval::kTurn];
+  // KKP
+  for (int k1 = 0; k1 < SQ_NB_PLUS1; ++k1) {
+    for (int k2 = 0; k2 < SQ_NB_PLUS1; ++k2) {
+      for (int j = 1; j < fe_end + 1; ++j) {
+        int j2 = j < fe_hand_end ? j - 1 : j;
+        TMP_KKP2(k1, k2, j) = TMP_KKP1(k1, k2, j2);
+      }
     }
   }
 
-  return apery_eval_detail;
+  // KPP
+  for (int k = 0; k < SQ_NB_PLUS1; ++k) {
+    for (int i = 1; i < fe_end; ++i) {
+      for (int j = 1; j < fe_end; ++j) {
+        int i2 = i < fe_hand_end ? i - 1 : i;
+        int j2 = j < fe_hand_end ? j - 1 : j;
+        TMP_KPP2(k, i, j) = TMP_KPP1(k, i2, j2);
+      }
+    }
+  }
+
+  // メモリ解放
+  delete[] tmp_kpp1;
+  delete[] tmp_kkp1;
+
+  // undef
+  #undef TMP_KKP1
+  #undef TMP_KPP1
+
+
+  //----- やねうら王classicの評価関数パラメータ（技巧のPsqIndexへの変換後）へ格納
+  // ・「tmp_kkp2、tmp_kpp2」から「kk_yaneuraou_classic、kkp_yaneuraou_classic、kpp_yaneuraou_classic」へ
+
+  // KK
+  for (int k1 = 0; k1 < 81; ++k1) {
+    for (int k2 = 0; k2 < 81; ++k2) {
+      kk_yaneuraou_classic[k1][k2] = TMP_KKP2(k1, k2, fe_end);
+    }
+  }
+
+  // KKP
+  for (int k1 = 0; k1 < 81; ++k1) {
+    for (int k2 = 0; k2 < 81; ++k2) {
+      for (int p = 0; p < 2110; ++p) {
+        kkp_yaneuraou_classic[k1][k2][p] = TMP_KKP2(k1, k2, GetYaneuraOuClassicPsqIndex((PsqIndex)p));
+      }
+    }
+  }
+
+  // KPP
+  for (int k = 0; k < 81; ++k) {
+    for (int p1 = 0; p1 < 2110; ++p1) {
+      for (int p2 = 0; p2 < 2110; ++p2) {
+        kpp_yaneuraou_classic[k][p1][p2] = TMP_KPP2(k, GetYaneuraOuClassicPsqIndex((PsqIndex)p1), GetYaneuraOuClassicPsqIndex((PsqIndex)p2));
+      }
+    }
+  }
+
+  //-----
+
+  // メモリ解放
+  delete[] tmp_kkp2;
+  delete[] tmp_kpp2;
+
+  // undef
+  #undef TMP_KKP2
+  #undef TMP_KPP2
 }
 
-// Aperyの駒割りの全計算
-Score AperyEval::EvaluateMaterial(const Position& pos) {
+// やねうら王classicの評価値の全計算
+YaneuraOuClassicEvalDetail YaneuraOuClassicEval::ComputeEval(const Position& pos, const PsqList& list) {
+  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
+
+  // 駒割り
+  yaneuraou_classic_eval_detail.material = EvaluateMaterial(pos) * FV_SCALE;
+
+  const Square sq_bk = pos.king_square(kBlack);
+  //const Square sq_wk = pos.king_square(kWhite);
+  const Square inv_sq_wk = Square::rotate180(pos.king_square(kWhite));
+
+  // KK
+  yaneuraou_classic_eval_detail.kk_board = kk_yaneuraou_classic[sq_bk][inv_sq_wk];
+
+  for (const PsqPair* i = list.begin(); i != list.end(); ++i) {
+    // KKP
+    yaneuraou_classic_eval_detail.kkp_board += kkp_yaneuraou_classic[sq_bk][inv_sq_wk][i->black()];
+
+    for (const PsqPair* j = list.begin(); j < i; ++j) {
+      // KPP
+      yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[sq_bk][i->black()][j->black()];
+      yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[inv_sq_wk][i->white()][j->white()];
+    }
+  }
+
+  return yaneuraou_classic_eval_detail;
+}
+
+// やねうら王classicの駒割りの全計算
+Score YaneuraOuClassicEval::EvaluateMaterial(const Position& pos) {
   Score score = kScoreZero;
 
   // 盤上の駒
@@ -1010,8 +1024,8 @@ Score AperyEval::EvaluateMaterial(const Position& pos) {
   return score;
 }
 
-// Aperyの駒割りの差分計算
-Score AperyEval::EvaluateDifferenceOfMaterial(const Position& pos) {
+// やねうら王classicの駒割りの差分計算
+Score YaneuraOuClassicEval::EvaluateDifferenceOfMaterial(const Position& pos) {
   const Move move = pos.last_move();
 
   // 駒打ち
@@ -1036,26 +1050,28 @@ Score AperyEval::EvaluateDifferenceOfMaterial(const Position& pos) {
   return (pos.side_to_move() == kBlack ? -materialDiff : materialDiff);
 }
 
-// Aperyの評価値の計算
-int32_t AperyEvalDetail::Sum(const Color side_to_move) const {
+// やねうら王classicの評価値の計算
+int32_t YaneuraOuClassicEvalDetail::Sum(const Color side_to_move) const {
   // 駒の位置（kpp_board[kWhite]のみマイナス）
-  int32_t score_board = kk_board + kkp_board + kpp_board[kBlack] - kpp_board[kWhite];
-  // 手番（すべてプラス）
-  int32_t score_turn  = kk_turn  + kkp_turn  + kpp_turn [kBlack] + kpp_turn [kWhite];
+  // ・KKとKKPはFV_SCALE_KK_KKPで割る
+  int32_t score_board = (kk_board + kkp_board) / YaneuraOuClassicEval::FV_SCALE_KK_KKP + (kpp_board[kBlack] - kpp_board[kWhite]);
+
+  // 手番
+  // ・存在しない
 
   // 合計
-  int32_t score_sum = (side_to_move == kBlack ? (material + score_board) : -(material + score_board)) + score_turn;
+  int32_t score_sum = (side_to_move == kBlack ? (material + score_board) : -(material + score_board));
 
   return score_sum;
 }
 
-// Aperyの生の評価値を１歩＝１００点（centipawn）の評価値に変換する
-double AperyEval::ToCentiPawn(const int32_t value) {
+// やねうら王classicの生の評価値を１歩＝１００点（centipawn）の評価値に変換する
+double YaneuraOuClassicEval::ToCentiPawn(const int32_t value) {
   return ((double)value) / FV_SCALE * 100 / (int)PawnValue;
 }
 
-// Aperyの生の評価値を１歩＝１００点（centipawn）の評価値（手番側から見た評価値）に変換する
-double AperyEval::ToCentiPawn(const int32_t value, const Color side_to_move) {
+// やねうら王classicの生の評価値を１歩＝１００点（centipawn）の評価値（手番側から見た評価値）に変換する
+double YaneuraOuClassicEval::ToCentiPawn(const int32_t value, const Color side_to_move) {
   return side_to_move == kBlack ? ToCentiPawn(value) : -ToCentiPawn(value);
 }
 
@@ -1161,33 +1177,33 @@ void EvalDetail::Print(Color side_to_move) const {
   // 技巧の評価値（double）
   double score_gikou = score_kp_total + score_controls + score_two_pieces + score_king_safety + score_sliders;
 
-  // Aperyの評価値（double）
-  double score_apery = AperyEval::ToCentiPawn(apery_eval_detail.Sum(side_to_move));
+  // やねうら王classicの評価値（double）
+  double score_yaneuraou_classic = YaneuraOuClassicEval::ToCentiPawn(yaneuraou_classic_eval_detail.Sum(side_to_move));
 
   // 序盤・中盤・終盤の評価値の割合
-  double rate_opening_apery = (double)g_AperyEvalOpening / 100;
-  double rate_opening_gikou = 1 - rate_opening_apery;
+  double rate_opening_yaneuraou_classic = (double)g_YaneuraOuClassicEvalOpening / 100;
+  double rate_opening_gikou = 1 - rate_opening_yaneuraou_classic;
 
-  double rate_middle_game_apery = (double)g_AperyEvalMiddleGame / 100;
-  double rate_middle_game_gikou = 1 - rate_middle_game_apery;
+  double rate_middle_game_yaneuraou_classic = (double)g_YaneuraOuClassicEvalMiddleGame / 100;
+  double rate_middle_game_gikou = 1 - rate_middle_game_yaneuraou_classic;
 
-  double rate_end_game_apery = (double)g_AperyEvalEndGame / 100;
-  double rate_end_game_gikou = 1 - rate_end_game_apery;
+  double rate_end_game_yaneuraou_classic = (double)g_YaneuraOuClassicEvalEndGame / 100;
+  double rate_end_game_gikou = 1 - rate_end_game_yaneuraou_classic;
 
-  // 現在の進行度での技巧、Aperyの評価値の割合
+  // 現在の進行度での技巧、やねうら王classicの評価値の割合
   double rate_gikou = 0;
-  double rate_apery = 0;
+  double rate_yaneuraou_classic = 0;
 
   if (progress_double < 0.5) {
     rate_gikou = (1 - progress_double * 2) * rate_opening_gikou + (progress_double * 2) * rate_middle_game_gikou;
-    rate_apery = (1 - progress_double * 2) * rate_opening_apery + (progress_double * 2) * rate_middle_game_apery;
+    rate_yaneuraou_classic = (1 - progress_double * 2) * rate_opening_yaneuraou_classic + (progress_double * 2) * rate_middle_game_yaneuraou_classic;
   } else {
     rate_gikou = (2 - progress_double * 2) * rate_middle_game_gikou + (progress_double * 2 - 1) * rate_end_game_gikou;
-    rate_apery = (2 - progress_double * 2) * rate_middle_game_apery + (progress_double * 2 - 1) * rate_end_game_apery;
+    rate_yaneuraou_classic = (2 - progress_double * 2) * rate_middle_game_yaneuraou_classic + (progress_double * 2 - 1) * rate_end_game_yaneuraou_classic;
   }
 
   // 最終的な評価値
-  int score_mix = score_gikou * rate_gikou + score_apery * rate_apery;
+  int score_mix = score_gikou * rate_gikou + score_yaneuraou_classic * rate_yaneuraou_classic;
   score_mix = std::max(std::min(score_mix, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
 
 
@@ -1206,12 +1222,12 @@ void EvalDetail::Print(Color side_to_move) const {
   std::printf("Eval        =%+6d\n", final_score);
   std::printf("-----\n");
   std::printf("Gikou       =%+9.2f\n", score_gikou);
-  std::printf("Apery       =%+9.2f\n", AperyEval::ToCentiPawn(apery_eval_detail.Sum(side_to_move)));
+  std::printf("YaneuraOu   =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn(yaneuraou_classic_eval_detail.Sum(side_to_move)));
   std::printf("-----\n");
   std::printf("SideToMove  = %s\n", side_to_move == kBlack ? "Black(Sente)" : "White(Gote)");
   std::printf("Progress(%%) =%9.2f%%\n", progress_double * 100);
   std::printf("Gikou(%%)    =%9.2f%%\n", rate_gikou * 100);
-  std::printf("Apery(%%)    =%9.2f%%\n", rate_apery * 100);
+  std::printf("YaneuraOu(%%)=%9.2f%%\n", rate_yaneuraou_classic * 100);
 
 
   // 技巧の評価値の情報を標準出力へ出力する
@@ -1225,19 +1241,19 @@ void EvalDetail::Print(Color side_to_move) const {
   std::printf("Sliders     =%+9.2f\n", score_sliders);
 
 
-  // Aperyの評価値の情報を標準出力へ出力する
-  apery_eval_detail.Print(side_to_move);
+  // やねうら王classicの評価値の情報を標準出力へ出力する
+  yaneuraou_classic_eval_detail.Print(side_to_move);
 }
 
-// Aperyの評価値の情報を標準出力へ出力する
-void AperyEvalDetail::Print(const Color side_to_move) const {
-  std::printf("---------- Apery\n");
-  std::printf("Sum         =%+9.2f\n", AperyEval::ToCentiPawn(Sum(side_to_move)));
+// やねうら王classicの評価値の情報を標準出力へ出力する
+void YaneuraOuClassicEvalDetail::Print(const Color side_to_move) const {
+  std::printf("---------- YaneuraOuClassic\n");
+  std::printf("Sum         =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn(Sum(side_to_move)));
   std::printf("-----\n");
-  std::printf("Material    =%+9.2f\n", AperyEval::ToCentiPawn(material, side_to_move));
-  std::printf("KK          =%+9.2f\n", AperyEval::ToCentiPawn(kk_board, side_to_move) + AperyEval::ToCentiPawn(kk_turn));
-  std::printf("KKP         =%+9.2f\n", AperyEval::ToCentiPawn(kkp_board, side_to_move) + AperyEval::ToCentiPawn(kkp_turn));
-  std::printf("KPP         =%+9.2f\n", AperyEval::ToCentiPawn(kpp_board[kBlack] - kpp_board[kWhite], side_to_move) + AperyEval::ToCentiPawn(kpp_turn[kBlack] + kpp_turn[kWhite]));
+  std::printf("Material    =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn(material, side_to_move));
+  std::printf("KK          =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn((double)(kk_board)  / YaneuraOuClassicEval::FV_SCALE_KK_KKP, side_to_move));
+  std::printf("KKP         =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn((double)(kkp_board) / YaneuraOuClassicEval::FV_SCALE_KK_KKP, side_to_move));
+  std::printf("KPP         =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn(kpp_board[kBlack] - kpp_board[kWhite], side_to_move));
   std::printf("----------\n");
 }
 

@@ -424,14 +424,14 @@ class PsqControlList {
 
 
 /**
- * Apery評価関数用のPsqIndexへの変換テーブルを初期化します.
+ * やねうら王classic評価関数用のPsqIndexへの変換テーブルを初期化します.
  */
-void InitAperyPsqIndexArray();
+void InitYaneuraOuClassicPsqIndexArray();
 
 /**
- * Apery評価関数用のPsqIndexを取得します.
+ * やねうら王classic評価関数用のPsqIndexを取得します.
  */
-int GetAperyPsqIndex(PsqIndex psq_index);
+int GetYaneuraOuClassicPsqIndex(PsqIndex psq_index);
 
 
 #endif /* PSQ_H_ */
