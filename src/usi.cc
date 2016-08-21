@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou YaneuraOuClassicEvalMix 20160809";
+const auto kProgramName = "Gikou NozomiEvalMix 20160821";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -215,8 +215,8 @@ void ExecuteCommand(const std::string& command, Node* const node,
     thinking->Initialize();
     Evaluation::ReadParametersFromFile("params.bin");
 
-    // やねうら王classicの評価関数ファイルの読込み
-    YaneuraOuClassicEval::LoadEval();
+    // nozomiの評価関数ファイルの読込み
+    NozomiEval::LoadEval();
 
     SYNCED_PRINTF("readyok\n");
 
@@ -254,6 +254,10 @@ void ExecuteCommand(const std::string& command, Node* const node,
   } else if (command == "eval") {
     // 評価値の詳細情報を標準出力へ出力する
     Evaluation::Print(*node);
+
+  } else if (command == "testpsq") {
+    // psq関連のテスト（デバッグ用）
+    TestPsq();
 
   } else {
     SYNCED_PRINTF("info string Unsupported Command: %s\n", command.c_str());
@@ -343,13 +347,13 @@ UsiOptions::UsiOptions() {
   // 勝ち数が少ない定跡を除外する場合はtrue
   map_.emplace("TinyBook", UsiOption(false));
 
-  // やねうら王classicの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-  map_.emplace("Z11_YaneuraOuClassicEvalJoban" , UsiOption(50, 0, 100));
-  map_.emplace("Z12_YaneuraOuClassicEvalChuban", UsiOption(50, 0, 100));
-  map_.emplace("Z13_YaneuraOuClassicEvalShuban", UsiOption(50, 0, 100));
+  // nozomiの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+  map_.emplace("Z11_NozomiEvalJoban" , UsiOption(50, 0, 100));
+  map_.emplace("Z12_NozomiEvalChuban", UsiOption(50, 0, 100));
+  map_.emplace("Z13_NozomiEvalShuban", UsiOption(50, 0, 100));
 
-  // やねうら王classicの評価関数バイナリのフォルダ
-  map_.emplace("Z14_YaneuraOuClassicEvalFolder", UsiOption("./YaneuraOuClassicEval", 0));
+  // nozomiの評価関数バイナリのフォルダ
+  map_.emplace("Z14_NozomiEvalFolder", UsiOption("./NozomiEval", 0));
 }
 
 void UsiOptions::PrintListOfOptions() {

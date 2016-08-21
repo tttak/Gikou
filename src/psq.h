@@ -424,14 +424,28 @@ class PsqControlList {
 
 
 /**
- * やねうら王classic評価関数用のPsqIndexへの変換テーブルを初期化します.
+ * nozomi評価関数用のPsqIndexへの変換テーブルを初期化します.
  */
-void InitYaneuraOuClassicPsqIndexArray();
+void InitNozomiPsqIndexArray();
 
 /**
- * やねうら王classic評価関数用のPsqIndexを取得します.
+ * nozomi評価関数用のPsqIndexを取得します.
  */
-int GetYaneuraOuClassicPsqIndex(PsqIndex psq_index);
+int GetNozomiPsqIndex(PsqIndex psq_index);
 
+/**
+ * Square内のインデックスを変換します.（nozomi→技巧）
+ */
+int GetGikouSquareFromNozomi_9x9(int sq_nozomi);
+
+/**
+ * Square内のインデックスを変換します.（技巧→nozomi）
+ */
+int GetNozomiSquareFromGikou_9x9(int sq_gikou);
+
+/**
+ * psq関連のテスト（デバッグ用）
+ */
+void TestPsq();
 
 #endif /* PSQ_H_ */

@@ -30,28 +30,29 @@
 
 std::unique_ptr<EvalParameters> g_eval_params(new EvalParameters);
 
-// やねうら王classicの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-extern int g_YaneuraOuClassicEvalOpening;
-extern int g_YaneuraOuClassicEvalMiddleGame;
-extern int g_YaneuraOuClassicEvalEndGame;
+// nozomiの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+extern int g_NozomiEvalOpening;
+extern int g_NozomiEvalMiddleGame;
+extern int g_NozomiEvalEndGame;
 
-// やねうら王classicの評価関数バイナリのフォルダ
-extern std::string g_YaneuraOuClassicEvalFolder;
+// nozomiの評価関数バイナリのフォルダ
+extern std::string g_NozomiEvalFolder;
 
-// やねうら王classicの評価関数テーブルの要素数など
-const int SQ_NB_PLUS1 = 82;
-const int fe_end = 1535;
-const int fe_hand_end = 77;
+// nozomiの評価関数テーブルの要素数など
+const int SQ_NB = 81;
+const int fe_end = 1548;
 
-// やねうら王classicの評価関数パラメータ用
-typedef int32_t ValueKk;
-typedef int32_t ValueKkp;
+// nozomiの評価関数パラメータ用
+// ・nozomiにはKKは存在しない
+//typedef int16_t ValueKk;
+typedef int16_t ValueKkp;
 typedef int16_t ValueKpp;
 
-// やねうら王classicの評価関数パラメータ（技巧のPsqIndexへの変換後）
-ValueKk  kk_yaneuraou_classic [81][81];
-ValueKkp kkp_yaneuraou_classic[81][81][2110];
-ValueKpp kpp_yaneuraou_classic[81][2110][2110];
+// nozomiの評価関数パラメータ（技巧のPsqIndexへの変換後）
+// ・nozomiにはKKは存在しない
+//ValueKk  kk_nozomi [81][81];
+ValueKkp kkp_nozomi[81][81][2110];
+ValueKpp kpp_nozomi[81][2110][2110];
 
 
 Score EvalDetail::ComputeFinalScore(Color side_to_move,
@@ -116,33 +117,33 @@ Score EvalDetail::ComputeFinalScore(Color side_to_move,
   double score_gikou = (double)sum / (kScale * static_cast<int64_t>(kFvScale));
   score_gikou = (side_to_move == kBlack ? score_gikou : -score_gikou);
 
-  // やねうら王classicの評価値（double）
-  double score_yaneuraou_classic = YaneuraOuClassicEval::ToCentiPawn(yaneuraou_classic_eval_detail.Sum(side_to_move));
+  // nozomiの評価値（double）
+  double score_nozomi = NozomiEval::ToCentiPawn(nozomi_eval_detail.Sum(side_to_move));
 
   // 序盤・中盤・終盤の評価値の割合
-  double rate_opening_yaneuraou_classic = (double)g_YaneuraOuClassicEvalOpening / 100;
-  double rate_opening_gikou = 1 - rate_opening_yaneuraou_classic;
+  double rate_opening_nozomi = (double)g_NozomiEvalOpening / 100;
+  double rate_opening_gikou = 1 - rate_opening_nozomi;
 
-  double rate_middle_game_yaneuraou_classic = (double)g_YaneuraOuClassicEvalMiddleGame / 100;
-  double rate_middle_game_gikou = 1 - rate_middle_game_yaneuraou_classic;
+  double rate_middle_game_nozomi = (double)g_NozomiEvalMiddleGame / 100;
+  double rate_middle_game_gikou = 1 - rate_middle_game_nozomi;
 
-  double rate_end_game_yaneuraou_classic = (double)g_YaneuraOuClassicEvalEndGame / 100;
-  double rate_end_game_gikou = 1 - rate_end_game_yaneuraou_classic;
+  double rate_end_game_nozomi = (double)g_NozomiEvalEndGame / 100;
+  double rate_end_game_gikou = 1 - rate_end_game_nozomi;
 
-  // 現在の進行度での技巧、やねうら王classicの評価値の割合
+  // 現在の進行度での技巧、nozomiの評価値の割合
   double rate_gikou = 0;
-  double rate_yaneuraou_classic = 0;
+  double rate_nozomi = 0;
 
   if (progress_double < 0.5) {
     rate_gikou = (1 - progress_double * 2) * rate_opening_gikou + (progress_double * 2) * rate_middle_game_gikou;
-    rate_yaneuraou_classic = (1 - progress_double * 2) * rate_opening_yaneuraou_classic + (progress_double * 2) * rate_middle_game_yaneuraou_classic;
+    rate_nozomi = (1 - progress_double * 2) * rate_opening_nozomi + (progress_double * 2) * rate_middle_game_nozomi;
   } else {
     rate_gikou = (2 - progress_double * 2) * rate_middle_game_gikou + (progress_double * 2 - 1) * rate_end_game_gikou;
-    rate_yaneuraou_classic = (2 - progress_double * 2) * rate_middle_game_yaneuraou_classic + (progress_double * 2 - 1) * rate_end_game_yaneuraou_classic;
+    rate_nozomi = (2 - progress_double * 2) * rate_middle_game_nozomi + (progress_double * 2 - 1) * rate_end_game_nozomi;
   }
 
   // 最終的な評価値
-  int score_mix = score_gikou * rate_gikou + score_yaneuraou_classic * rate_yaneuraou_classic;
+  int score_mix = score_gikou * rate_gikou + score_nozomi * rate_nozomi;
   score_mix = std::max(std::min(score_mix, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
 
   return static_cast<Score>(score_mix);
@@ -194,18 +195,19 @@ inline EvalDetail SumPositionalScore(const PsqPair psq, const PsqList& list,
   }
 
 
-  // 3. やねうら王classicのKKPとKPP
+  // 3. nozomiのKKPとKPP
   // ・KKは計算不要。この「特定の１駒」は玉ではないので。
-  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
+  NozomiEvalDetail nozomi_eval_detail;
+  const Square sq_wk = pos.king_square(kWhite);
 
   // KKP
-  yaneuraou_classic_eval_detail.kkp_board = kkp_yaneuraou_classic[bk][wk][psq.black()];
+  nozomi_eval_detail.kkp_board = kkp_nozomi[bk][sq_wk][psq.black()];
 
   for (const PsqPair& j : list) {
     if (j.black() != psq.black()) {
       // KPP
-      yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[bk][psq.black()][j.black()];
-      yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[wk][psq.white()][j.white()];
+      nozomi_eval_detail.kpp_board[kBlack] += kpp_nozomi[bk][psq.black()][j.black()];
+      nozomi_eval_detail.kpp_board[kWhite] += kpp_nozomi[wk][psq.white()][j.white()];
     }
   }
 
@@ -215,7 +217,7 @@ inline EvalDetail SumPositionalScore(const PsqPair psq, const PsqList& list,
   sum.kp[kBlack] = kp_black;
   sum.kp[kWhite] = FlipScores3x1(kp_white);
   sum.two_pieces = two_pieces;
-  sum.yaneuraou_classic_eval_detail = yaneuraou_classic_eval_detail;
+  sum.nozomi_eval_detail = nozomi_eval_detail;
 
   return sum;
 }
@@ -244,20 +246,21 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   two_pieces -= g_eval_params->two_pieces[psq1.black()][psq2.black()];
 
 
-  // 4. やねうら王classicのKKPとKPP
+  // 4. nozomiのKKPとKPP
   // ・KKは計算不要。この「特定の２駒」は玉ではないので。
-  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
+  NozomiEvalDetail nozomi_eval_detail;
+  const Square sq_wk = pos.king_square(kWhite);
 
   // KKP
-  yaneuraou_classic_eval_detail.kkp_board = kkp_yaneuraou_classic[bk][wk][psq1.black()]
-                                          + kkp_yaneuraou_classic[bk][wk][psq2.black()];
+  nozomi_eval_detail.kkp_board = kkp_nozomi[bk][sq_wk][psq1.black()]
+                               + kkp_nozomi[bk][sq_wk][psq2.black()];
 
   // 駒１のKPP
   for (const PsqPair& j : list) {
     if (j.black() != psq1.black()) {
       // KPP
-      yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[bk][psq1.black()][j.black()];
-      yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[wk][psq1.white()][j.white()];
+      nozomi_eval_detail.kpp_board[kBlack] += kpp_nozomi[bk][psq1.black()][j.black()];
+      nozomi_eval_detail.kpp_board[kWhite] += kpp_nozomi[wk][psq1.white()][j.white()];
     }
   }
 
@@ -265,15 +268,15 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   for (const PsqPair& j : list) {
     if (j.black() != psq2.black()) {
       // KPP
-      yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[bk][psq2.black()][j.black()];
-      yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[wk][psq2.white()][j.white()];
+      nozomi_eval_detail.kpp_board[kBlack] += kpp_nozomi[bk][psq2.black()][j.black()];
+      nozomi_eval_detail.kpp_board[kWhite] += kpp_nozomi[wk][psq2.white()][j.white()];
     }
   }
 
 
-  // 5. やねうら王classicのKPP計算で重複して加算されてしまった部分を補正する
-  yaneuraou_classic_eval_detail.kpp_board[kBlack] -= kpp_yaneuraou_classic[bk][psq1.black()][psq2.black()];
-  yaneuraou_classic_eval_detail.kpp_board[kWhite] -= kpp_yaneuraou_classic[wk][psq1.white()][psq2.white()];
+  // 5. nozomiのKPP計算で重複して加算されてしまった部分を補正する
+  nozomi_eval_detail.kpp_board[kBlack] -= kpp_nozomi[bk][psq1.black()][psq2.black()];
+  nozomi_eval_detail.kpp_board[kWhite] -= kpp_nozomi[wk][psq1.white()][psq2.white()];
 
 
   // -----
@@ -282,7 +285,7 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   sum.kp[kBlack] = kp_black;
   sum.kp[kWhite] = FlipScores3x1(kp_white);
   sum.two_pieces = two_pieces;
-  sum.yaneuraou_classic_eval_detail = yaneuraou_classic_eval_detail;
+  sum.nozomi_eval_detail = nozomi_eval_detail;
 
   return sum;
 }
@@ -597,44 +600,46 @@ EvalDetail EvaluateDifferenceForKingMove(const Position& pos,
   }
 
 
-  // 3. 移動した玉に関するやねうら王classicのKK、KKP、KPPのスコアを再計算する
-  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
+  // 3. 移動した玉に関するnozomiのKK、KKP、KPPのスコアを再計算する
+  NozomiEvalDetail nozomi_eval_detail;
 
   const Square sq_bk = pos.king_square(kBlack);
+  const Square sq_wk = pos.king_square(kWhite);
   const Square inv_sq_wk = Square::rotate180(pos.king_square(kWhite));
 
   // KK
-  yaneuraou_classic_eval_detail.kk_board = kk_yaneuraou_classic[sq_bk][inv_sq_wk];
-
-  diff.yaneuraou_classic_eval_detail.kk_board = yaneuraou_classic_eval_detail.kk_board - previous_eval.yaneuraou_classic_eval_detail.kk_board;
+  // ・nozomiにはKKは存在しない
+  //nozomi_eval_detail.kk_board = kk_nozomi[sq_bk][inv_sq_wk];
+  //
+  //diff.nozomi_eval_detail.kk_board = nozomi_eval_detail.kk_board - previous_eval.nozomi_eval_detail.kk_board;
 
 
   // KKP
   for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
-    yaneuraou_classic_eval_detail.kkp_board += kkp_yaneuraou_classic[sq_bk][inv_sq_wk][i->black()];
+    nozomi_eval_detail.kkp_board += kkp_nozomi[sq_bk][sq_wk][i->black()];
   }
 
-  diff.yaneuraou_classic_eval_detail.kkp_board = yaneuraou_classic_eval_detail.kkp_board - previous_eval.yaneuraou_classic_eval_detail.kkp_board;
+  diff.nozomi_eval_detail.kkp_board = nozomi_eval_detail.kkp_board - previous_eval.nozomi_eval_detail.kkp_board;
 
 
   // KPP
   if (king_color == kBlack) {
     for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
       for (const PsqPair* j = list->begin(); j < i; ++j) {
-        yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[sq_bk][i->black()][j->black()];
+        nozomi_eval_detail.kpp_board[kBlack] += kpp_nozomi[sq_bk][i->black()][j->black()];
       }
     }
 
-    diff.yaneuraou_classic_eval_detail.kpp_board[kBlack] = yaneuraou_classic_eval_detail.kpp_board[kBlack] - previous_eval.yaneuraou_classic_eval_detail.kpp_board[kBlack];
+    diff.nozomi_eval_detail.kpp_board[kBlack] = nozomi_eval_detail.kpp_board[kBlack] - previous_eval.nozomi_eval_detail.kpp_board[kBlack];
 
   } else {
     for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
       for (const PsqPair* j = list->begin(); j < i; ++j) {
-        yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[inv_sq_wk][i->white()][j->white()];
+        nozomi_eval_detail.kpp_board[kWhite] += kpp_nozomi[inv_sq_wk][i->white()][j->white()];
       }
     }
 
-    diff.yaneuraou_classic_eval_detail.kpp_board[kWhite] = yaneuraou_classic_eval_detail.kpp_board[kWhite] - previous_eval.yaneuraou_classic_eval_detail.kpp_board[kWhite];
+    diff.nozomi_eval_detail.kpp_board[kWhite] = nozomi_eval_detail.kpp_board[kWhite] - previous_eval.nozomi_eval_detail.kpp_board[kWhite];
   }
 
   return diff;
@@ -728,8 +733,8 @@ EvalDetail Evaluation::EvaluateAll(const Position& pos,
   // 4. 飛車・角・香車の利き
   sum.sliders = EvaluateSlidingPieces(pos);
 
-  // 5. やねうら王classicの評価値（全計算）
-  sum.yaneuraou_classic_eval_detail = YaneuraOuClassicEval::ComputeEval(pos, psq_list);
+  // 5. nozomiの評価値（全計算）
+  sum.nozomi_eval_detail = NozomiEval::ComputeEval(pos, psq_list);
 
   return sum;
 }
@@ -779,8 +784,8 @@ EvalDetail Evaluation::EvaluateDifference(const Position& pos,
   // 3. 飛車・角・香車の利き（末端評価）
   diff.sliders = EvaluateSlidingPieces(pos) - previous_eval.sliders;
 
-  // 4. やねうら王classicの駒割りの差分計算
-  diff.yaneuraou_classic_eval_detail.material = YaneuraOuClassicEval::EvaluateDifferenceOfMaterial(pos) * YaneuraOuClassicEval::FV_SCALE;
+  // 4. nozomiの駒割りの差分計算
+  diff.nozomi_eval_detail.material = NozomiEval::EvaluateDifferenceOfMaterial(pos) * NozomiEval::FV_SCALE;
 
   return diff;
 }
@@ -806,9 +811,9 @@ void Evaluation::ReadParametersFromFile(const char* file_name) {
 
 
 /**
- * やねうら王classicの評価値関連
+ * nozomiの評価値関連
  */
-namespace YaneuraOuClassicEval {
+namespace NozomiEval {
 
   /** 駒の価値 */
   const int PieceValue[32] = {
@@ -841,118 +846,66 @@ namespace YaneuraOuClassicEval {
 } // namespace
 
 
-// やねうら王classicの評価関数ファイルの読込み
-void YaneuraOuClassicEval::LoadEval() {
+// nozomiの評価関数ファイルの読込み
+void NozomiEval::LoadEval() {
 
-  //----- やねうら王classicの評価関数ファイルの読込み（KK、KKP）
-  // ・tmp_kkp1へ読み込む
-  std::string filename_kkp = g_YaneuraOuClassicEvalFolder + "/kkp32ap.bin";
-  std::fstream fs_kkp;
-  fs_kkp.open(filename_kkp, std::ios::in | std::ios::binary);
-  if (fs_kkp.fail()) {
-    std::printf("info string Failed to open %s.\n", filename_kkp.c_str());
+  //----- nozomiの評価関数ファイルの読込み
+  // ・tmp_kkp1、tmp_kpp1へ読み込む
+  std::string filename_kkpkpp = g_NozomiEvalFolder + "/new_fv.bin";
+  std::fstream ifs_kkpkpp;
+  ifs_kkpkpp.open(filename_kkpkpp, std::ios::in | std::ios::binary);
+  if (ifs_kkpkpp.fail()) {
+    std::printf("info string Failed to open %s.\n", filename_kkpkpp.c_str());
     exit(EXIT_FAILURE);
   }
 
-  // 評価関数ファイルの読込み用
-  int count_kkp = SQ_NB_PLUS1 * SQ_NB_PLUS1 * (fe_end + 1);
-  size_t size_kkp = count_kkp * (int)sizeof(ValueKkp);
-  ValueKkp* tmp_kkp1 = new ValueKkp[size_kkp];
-
-  fs_kkp.read((char*)tmp_kkp1, size_kkp);
-  if (fs_kkp.fail()) {
-    std::printf("info string Failed to read %s.\n", filename_kkp.c_str());
-    delete[] tmp_kkp1;
-    exit(EXIT_FAILURE);
-  }
-  fs_kkp.close();
-
-
-  //----- やねうら王classicの評価関数ファイルの読込み（KPP）
-  // ・tmp_kpp1へ読み込む
-  std::string filename_kpp = g_YaneuraOuClassicEvalFolder + "/kpp16ap.bin";
-  std::fstream fs_kpp;
-  fs_kpp.open(filename_kpp, std::ios::in | std::ios::binary);
-  if (fs_kpp.fail()) {
-    std::printf("info string Failed to open %s.\n", filename_kpp.c_str());
-    exit(EXIT_FAILURE);
-  }
-
-  // 評価関数ファイルの読込み用
-  int count_kpp = SQ_NB_PLUS1 * fe_end * fe_end;
+  // KPP
+  int count_kpp = SQ_NB * fe_end * fe_end;
   size_t size_kpp = count_kpp * (int)sizeof(ValueKpp);
   ValueKpp* tmp_kpp1 = new ValueKpp[size_kpp];
 
-  fs_kpp.read((char*)tmp_kpp1, size_kpp);
-  if (fs_kpp.fail()) {
-    std::printf("info string Failed to read %s.\n", filename_kpp.c_str());
+  ifs_kkpkpp.read((char*)tmp_kpp1, size_kpp);
+  if (ifs_kkpkpp.fail()) {
+    std::printf("info string Failed to read %s.(KPP)\n", filename_kkpkpp.c_str());
+    delete[] tmp_kpp1;
+    exit(EXIT_FAILURE);
+  }
+
+  // KKP
+  int count_kkp = SQ_NB * SQ_NB * fe_end;
+  size_t size_kkp = count_kkp * (int)sizeof(ValueKkp);
+  ValueKkp* tmp_kkp1 = new ValueKkp[size_kkp];
+
+  ifs_kkpkpp.read((char*)tmp_kkp1, size_kkp);
+  if (ifs_kkpkpp.fail()) {
+    std::printf("info string Failed to read %s.(KKP)\n", filename_kkpkpp.c_str());
     delete[] tmp_kkp1;
     delete[] tmp_kpp1;
     exit(EXIT_FAILURE);
   }
-  fs_kpp.close();
+
+  ifs_kkpkpp.close();
 
 
-  //----- 持ち駒の添字のコンバート時の間違い対応
-  // ・「tmp_kkp1、tmp_kpp1」から「tmp_kkp2、tmp_kpp2」へ
+  //----- nozomiの評価関数パラメータ（技巧のPsqIndexへの変換後）へ格納
+  // ・「tmp_kkp1、tmp_kpp1」から「kk_nozomi、kkp_nozomi、kpp_nozomi」へ
 
-  #define TMP_KKP1(k1, k2, p) tmp_kkp1[k1 * SQ_NB_PLUS1 * (fe_end + 1) + k2 * (fe_end + 1) + p]
+  #define TMP_KKP1(k1, k2, p) tmp_kkp1[k1 * SQ_NB * fe_end + k2 * fe_end + p]
   #define TMP_KPP1(k, p1, p2) tmp_kpp1[k * fe_end * fe_end + p1 * fe_end + p2]
 
-  #define TMP_KKP2(k1, k2, p) tmp_kkp2[k1 * SQ_NB_PLUS1 * (fe_end + 1) + k2 * (fe_end + 1) + p]
-  #define TMP_KPP2(k, p1, p2) tmp_kpp2[k * fe_end * fe_end + p1 * fe_end + p2]
-
-  ValueKkp* tmp_kkp2 = new ValueKkp[count_kkp];
-  ValueKpp* tmp_kpp2 = new ValueKpp[count_kpp];
-
-  memset(tmp_kkp2, 0, size_kkp);
-  memset(tmp_kpp2, 0, size_kpp);
-
-  // KKP
-  for (int k1 = 0; k1 < SQ_NB_PLUS1; ++k1) {
-    for (int k2 = 0; k2 < SQ_NB_PLUS1; ++k2) {
-      for (int j = 1; j < fe_end + 1; ++j) {
-        int j2 = j < fe_hand_end ? j - 1 : j;
-        TMP_KKP2(k1, k2, j) = TMP_KKP1(k1, k2, j2);
-      }
-    }
-  }
-
-  // KPP
-  for (int k = 0; k < SQ_NB_PLUS1; ++k) {
-    for (int i = 1; i < fe_end; ++i) {
-      for (int j = 1; j < fe_end; ++j) {
-        int i2 = i < fe_hand_end ? i - 1 : i;
-        int j2 = j < fe_hand_end ? j - 1 : j;
-        TMP_KPP2(k, i, j) = TMP_KPP1(k, i2, j2);
-      }
-    }
-  }
-
-  // メモリ解放
-  delete[] tmp_kpp1;
-  delete[] tmp_kkp1;
-
-  // undef
-  #undef TMP_KKP1
-  #undef TMP_KPP1
-
-
-  //----- やねうら王classicの評価関数パラメータ（技巧のPsqIndexへの変換後）へ格納
-  // ・「tmp_kkp2、tmp_kpp2」から「kk_yaneuraou_classic、kkp_yaneuraou_classic、kpp_yaneuraou_classic」へ
-
   // KK
-  for (int k1 = 0; k1 < 81; ++k1) {
-    for (int k2 = 0; k2 < 81; ++k2) {
-      kk_yaneuraou_classic[k1][k2] = TMP_KKP2(k1, k2, fe_end);
-    }
-  }
+  // ・nozomiにはKKは存在しない
+  //for (int k1 = 0; k1 < 81; ++k1) {
+  //  for (int k2 = 0; k2 < 81; ++k2) {
+  //    kk_nozomi[k1][k2] = 0;
+  //  }
+  //}
 
   // KKP
   for (int k1 = 0; k1 < 81; ++k1) {
     for (int k2 = 0; k2 < 81; ++k2) {
       for (int p = 0; p < 2110; ++p) {
-        kkp_yaneuraou_classic[k1][k2][p] = TMP_KKP2(k1, k2, GetYaneuraOuClassicPsqIndex((PsqIndex)p));
+        kkp_nozomi[k1][k2][p] = TMP_KKP1(GetNozomiSquareFromGikou_9x9(k1), GetNozomiSquareFromGikou_9x9(k2), GetNozomiPsqIndex((PsqIndex)p));
       }
     }
   }
@@ -961,7 +914,7 @@ void YaneuraOuClassicEval::LoadEval() {
   for (int k = 0; k < 81; ++k) {
     for (int p1 = 0; p1 < 2110; ++p1) {
       for (int p2 = 0; p2 < 2110; ++p2) {
-        kpp_yaneuraou_classic[k][p1][p2] = TMP_KPP2(k, GetYaneuraOuClassicPsqIndex((PsqIndex)p1), GetYaneuraOuClassicPsqIndex((PsqIndex)p2));
+        kpp_nozomi[k][p1][p2] = TMP_KPP1(GetNozomiSquareFromGikou_9x9(k), GetNozomiPsqIndex((PsqIndex)p1), GetNozomiPsqIndex((PsqIndex)p2));
       }
     }
   }
@@ -969,44 +922,50 @@ void YaneuraOuClassicEval::LoadEval() {
   //-----
 
   // メモリ解放
-  delete[] tmp_kkp2;
-  delete[] tmp_kpp2;
+  delete[] tmp_kkp1;
+  delete[] tmp_kpp1;
 
   // undef
-  #undef TMP_KKP2
-  #undef TMP_KPP2
+  #undef TMP_KKP1
+  #undef TMP_KPP1
 }
 
-// やねうら王classicの評価値の全計算
-YaneuraOuClassicEvalDetail YaneuraOuClassicEval::ComputeEval(const Position& pos, const PsqList& list) {
-  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
+// nozomiの評価値の全計算
+NozomiEvalDetail NozomiEval::ComputeEval(const Position& pos, const PsqList& list) {
+  NozomiEvalDetail nozomi_eval_detail;
 
   // 駒割り
-  yaneuraou_classic_eval_detail.material = EvaluateMaterial(pos) * FV_SCALE;
+  nozomi_eval_detail.material = EvaluateMaterial(pos) * FV_SCALE;
 
   const Square sq_bk = pos.king_square(kBlack);
-  //const Square sq_wk = pos.king_square(kWhite);
+  const Square sq_wk = pos.king_square(kWhite);
   const Square inv_sq_wk = Square::rotate180(pos.king_square(kWhite));
 
   // KK
-  yaneuraou_classic_eval_detail.kk_board = kk_yaneuraou_classic[sq_bk][inv_sq_wk];
+  // ・nozomiにはKKは存在しない
+  //nozomi_eval_detail.kk_board = kk_nozomi[sq_bk][inv_sq_wk];
 
   for (const PsqPair* i = list.begin(); i != list.end(); ++i) {
     // KKP
-    yaneuraou_classic_eval_detail.kkp_board += kkp_yaneuraou_classic[sq_bk][inv_sq_wk][i->black()];
+    nozomi_eval_detail.kkp_board += kkp_nozomi[sq_bk][sq_wk][i->black()];
+
+// デバッグ用
+#if 0
+    std::printf("kkp_nozomi[%d][%d][%d]=%d, GetNozomiPsqIndex(%d)=%d\n", (int)sq_bk, (int)sq_wk, (int)i->black(), kkp_nozomi[sq_bk][sq_wk][i->black()], (int)i->black(), GetNozomiPsqIndex(i->black()));
+#endif
 
     for (const PsqPair* j = list.begin(); j < i; ++j) {
       // KPP
-      yaneuraou_classic_eval_detail.kpp_board[kBlack] += kpp_yaneuraou_classic[sq_bk][i->black()][j->black()];
-      yaneuraou_classic_eval_detail.kpp_board[kWhite] += kpp_yaneuraou_classic[inv_sq_wk][i->white()][j->white()];
+      nozomi_eval_detail.kpp_board[kBlack] += kpp_nozomi[sq_bk][i->black()][j->black()];
+      nozomi_eval_detail.kpp_board[kWhite] += kpp_nozomi[inv_sq_wk][i->white()][j->white()];
     }
   }
 
-  return yaneuraou_classic_eval_detail;
+  return nozomi_eval_detail;
 }
 
-// やねうら王classicの駒割りの全計算
-Score YaneuraOuClassicEval::EvaluateMaterial(const Position& pos) {
+// nozomiの駒割りの全計算
+Score NozomiEval::EvaluateMaterial(const Position& pos) {
   Score score = kScoreZero;
 
   // 盤上の駒
@@ -1024,8 +983,8 @@ Score YaneuraOuClassicEval::EvaluateMaterial(const Position& pos) {
   return score;
 }
 
-// やねうら王classicの駒割りの差分計算
-Score YaneuraOuClassicEval::EvaluateDifferenceOfMaterial(const Position& pos) {
+// nozomiの駒割りの差分計算
+Score NozomiEval::EvaluateDifferenceOfMaterial(const Position& pos) {
   const Move move = pos.last_move();
 
   // 駒打ち
@@ -1050,28 +1009,30 @@ Score YaneuraOuClassicEval::EvaluateDifferenceOfMaterial(const Position& pos) {
   return (pos.side_to_move() == kBlack ? -materialDiff : materialDiff);
 }
 
-// やねうら王classicの評価値の計算
-int32_t YaneuraOuClassicEvalDetail::Sum(const Color side_to_move) const {
+// nozomiの評価値の計算
+int32_t NozomiEvalDetail::Sum(const Color side_to_move) const {
   // 駒の位置（kpp_board[kWhite]のみマイナス）
   // ・KKとKKPはFV_SCALE_KK_KKPで割る
-  int32_t score_board = (kk_board + kkp_board) / YaneuraOuClassicEval::FV_SCALE_KK_KKP + (kpp_board[kBlack] - kpp_board[kWhite]);
+  // ・nozomiにはKKは存在しない
+  int32_t score_board = kkp_board / NozomiEval::FV_SCALE_KK_KKP + (kpp_board[kBlack] - kpp_board[kWhite]);
 
   // 手番
-  // ・存在しない
+  // ・このバージョンのnozomiでは、手番の評価は固定値80。
+  int32_t score_turn  = NozomiEval::kTempo * NozomiEval::FV_SCALE;
 
   // 合計
-  int32_t score_sum = (side_to_move == kBlack ? (material + score_board) : -(material + score_board));
+  int32_t score_sum = (side_to_move == kBlack ? (material + score_board) : -(material + score_board)) + score_turn;
 
   return score_sum;
 }
 
-// やねうら王classicの生の評価値を１歩＝１００点（centipawn）の評価値に変換する
-double YaneuraOuClassicEval::ToCentiPawn(const int32_t value) {
+// nozomiの生の評価値を１歩＝１００点（centipawn）の評価値に変換する
+double NozomiEval::ToCentiPawn(const int32_t value) {
   return ((double)value) / FV_SCALE * 100 / (int)PawnValue;
 }
 
-// やねうら王classicの生の評価値を１歩＝１００点（centipawn）の評価値（手番側から見た評価値）に変換する
-double YaneuraOuClassicEval::ToCentiPawn(const int32_t value, const Color side_to_move) {
+// nozomiの生の評価値を１歩＝１００点（centipawn）の評価値（手番側から見た評価値）に変換する
+double NozomiEval::ToCentiPawn(const int32_t value, const Color side_to_move) {
   return side_to_move == kBlack ? ToCentiPawn(value) : -ToCentiPawn(value);
 }
 
@@ -1177,33 +1138,33 @@ void EvalDetail::Print(Color side_to_move) const {
   // 技巧の評価値（double）
   double score_gikou = score_kp_total + score_controls + score_two_pieces + score_king_safety + score_sliders;
 
-  // やねうら王classicの評価値（double）
-  double score_yaneuraou_classic = YaneuraOuClassicEval::ToCentiPawn(yaneuraou_classic_eval_detail.Sum(side_to_move));
+  // nozomiの評価値（double）
+  double score_nozomi = NozomiEval::ToCentiPawn(nozomi_eval_detail.Sum(side_to_move));
 
   // 序盤・中盤・終盤の評価値の割合
-  double rate_opening_yaneuraou_classic = (double)g_YaneuraOuClassicEvalOpening / 100;
-  double rate_opening_gikou = 1 - rate_opening_yaneuraou_classic;
+  double rate_opening_nozomi = (double)g_NozomiEvalOpening / 100;
+  double rate_opening_gikou = 1 - rate_opening_nozomi;
 
-  double rate_middle_game_yaneuraou_classic = (double)g_YaneuraOuClassicEvalMiddleGame / 100;
-  double rate_middle_game_gikou = 1 - rate_middle_game_yaneuraou_classic;
+  double rate_middle_game_nozomi = (double)g_NozomiEvalMiddleGame / 100;
+  double rate_middle_game_gikou = 1 - rate_middle_game_nozomi;
 
-  double rate_end_game_yaneuraou_classic = (double)g_YaneuraOuClassicEvalEndGame / 100;
-  double rate_end_game_gikou = 1 - rate_end_game_yaneuraou_classic;
+  double rate_end_game_nozomi = (double)g_NozomiEvalEndGame / 100;
+  double rate_end_game_gikou = 1 - rate_end_game_nozomi;
 
-  // 現在の進行度での技巧、やねうら王classicの評価値の割合
+  // 現在の進行度での技巧、nozomiの評価値の割合
   double rate_gikou = 0;
-  double rate_yaneuraou_classic = 0;
+  double rate_nozomi = 0;
 
   if (progress_double < 0.5) {
     rate_gikou = (1 - progress_double * 2) * rate_opening_gikou + (progress_double * 2) * rate_middle_game_gikou;
-    rate_yaneuraou_classic = (1 - progress_double * 2) * rate_opening_yaneuraou_classic + (progress_double * 2) * rate_middle_game_yaneuraou_classic;
+    rate_nozomi = (1 - progress_double * 2) * rate_opening_nozomi + (progress_double * 2) * rate_middle_game_nozomi;
   } else {
     rate_gikou = (2 - progress_double * 2) * rate_middle_game_gikou + (progress_double * 2 - 1) * rate_end_game_gikou;
-    rate_yaneuraou_classic = (2 - progress_double * 2) * rate_middle_game_yaneuraou_classic + (progress_double * 2 - 1) * rate_end_game_yaneuraou_classic;
+    rate_nozomi = (2 - progress_double * 2) * rate_middle_game_nozomi + (progress_double * 2 - 1) * rate_end_game_nozomi;
   }
 
   // 最終的な評価値
-  int score_mix = score_gikou * rate_gikou + score_yaneuraou_classic * rate_yaneuraou_classic;
+  int score_mix = score_gikou * rate_gikou + score_nozomi * rate_nozomi;
   score_mix = std::max(std::min(score_mix, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
 
 
@@ -1222,12 +1183,12 @@ void EvalDetail::Print(Color side_to_move) const {
   std::printf("Eval        =%+6d\n", final_score);
   std::printf("-----\n");
   std::printf("Gikou       =%+9.2f\n", score_gikou);
-  std::printf("YaneuraOu   =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn(yaneuraou_classic_eval_detail.Sum(side_to_move)));
+  std::printf("Nozomi      =%+9.2f\n", NozomiEval::ToCentiPawn(nozomi_eval_detail.Sum(side_to_move)));
   std::printf("-----\n");
   std::printf("SideToMove  = %s\n", side_to_move == kBlack ? "Black(Sente)" : "White(Gote)");
   std::printf("Progress(%%) =%9.2f%%\n", progress_double * 100);
   std::printf("Gikou(%%)    =%9.2f%%\n", rate_gikou * 100);
-  std::printf("YaneuraOu(%%)=%9.2f%%\n", rate_yaneuraou_classic * 100);
+  std::printf("Nozomi(%%)   =%9.2f%%\n", rate_nozomi * 100);
 
 
   // 技巧の評価値の情報を標準出力へ出力する
@@ -1241,19 +1202,19 @@ void EvalDetail::Print(Color side_to_move) const {
   std::printf("Sliders     =%+9.2f\n", score_sliders);
 
 
-  // やねうら王classicの評価値の情報を標準出力へ出力する
-  yaneuraou_classic_eval_detail.Print(side_to_move);
+  // nozomiの評価値の情報を標準出力へ出力する
+  nozomi_eval_detail.Print(side_to_move);
 }
 
-// やねうら王classicの評価値の情報を標準出力へ出力する
-void YaneuraOuClassicEvalDetail::Print(const Color side_to_move) const {
-  std::printf("---------- YaneuraOuClassic\n");
-  std::printf("Sum         =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn(Sum(side_to_move)));
+// nozomiの評価値の情報を標準出力へ出力する
+void NozomiEvalDetail::Print(const Color side_to_move) const {
+  std::printf("---------- Nozomi\n");
+  std::printf("Sum         =%+9.2f\n", NozomiEval::ToCentiPawn(Sum(side_to_move)));
   std::printf("-----\n");
-  std::printf("Material    =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn(material, side_to_move));
-  std::printf("KK          =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn((double)(kk_board)  / YaneuraOuClassicEval::FV_SCALE_KK_KKP, side_to_move));
-  std::printf("KKP         =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn((double)(kkp_board) / YaneuraOuClassicEval::FV_SCALE_KK_KKP, side_to_move));
-  std::printf("KPP         =%+9.2f\n", YaneuraOuClassicEval::ToCentiPawn(kpp_board[kBlack] - kpp_board[kWhite], side_to_move));
+  std::printf("Material    =%+9.2f\n", NozomiEval::ToCentiPawn(material, side_to_move));
+  std::printf("KKP         =%+9.2f\n", NozomiEval::ToCentiPawn((double)(kkp_board) / NozomiEval::FV_SCALE_KK_KKP, side_to_move));
+  std::printf("KPP         =%+9.2f\n", NozomiEval::ToCentiPawn(kpp_board[kBlack] - kpp_board[kWhite], side_to_move));
+  std::printf("Turn        =%+9.2f\n", NozomiEval::ToCentiPawn((double)NozomiEval::kTempo * NozomiEval::FV_SCALE));
   std::printf("----------\n");
 }
 

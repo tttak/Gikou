@@ -294,148 +294,321 @@ PsqControlList::BitSet128 PsqControlList::ComputeDifference(const PsqControlList
 }
 
 
-/** やねうら王classic評価関数用のPsqIndexへの変換テーブル. */
-int yaneuraou_classic_psq_index_array[2110];
+/** nozomi評価関数用のPsqIndexへの変換テーブル. */
+int nozomi_psq_index_array[2110];
 
-int GetYaneuraOuClassicPsqIndex(PsqIndex psq_index) {
-  return yaneuraou_classic_psq_index_array[psq_index];
+int GetNozomiPsqIndex(PsqIndex psq_index) {
+  return nozomi_psq_index_array[psq_index];
 }
 
-void SetYaneuraOuClassicPsqIndexArray(int gikou_index_start, int yaneuraou_classic_index_start, int cnt) {
+int GetNozomiSquare(int file, int rank) {
+  return -(file + 1) + (rank + 1) * 9;
+}
+
+int GetGikouSquare(int file, int rank) {
+  return file * 9 + rank;
+}
+
+// -----
+// Square内のインデックスを変換する。（nozomi→技巧）
+// ・sq_nozomi：0～80
+// ・戻り値   ：0～80
+// -----
+int GetGikouSquareFromNozomi_9x9(int sq_nozomi) {
+  int file = 8 - sq_nozomi % 9;
+  int rank = sq_nozomi / 9;
+
+  return GetGikouSquare(file, rank);
+}
+
+// -----
+// Square内のインデックスを変換する。（技巧→nozomi）
+// ・sq_gikou：0～80
+// ・戻り値  ：0～80
+// -----
+// ・技巧は  ｛右上（1一）が0、右下（1九）が8、左上（9一）が72、左下（9九）が80｝。
+// ・nozomiは｛左上（9一）が0、右上（1一）が8、左下（9九）が72、右下（1九）が80｝。
+// （例）72→0、0→8、73→9、1→17、74→18、2→26、80→72、8→80
+// -----
+int GetNozomiSquareFromGikou_9x9(int sq_gikou) {
+  int file = sq_gikou / 9;
+  int rank = sq_gikou % 9;
+
+  return GetNozomiSquare(file, rank);
+}
+
+// -----
+// Square内のインデックスを変換する。（技巧→nozomi）
+// ・sq_gikou：0～71（1段目を除く）
+// ・戻り値  ：9～80（1段目を除く）
+// （例）（1二）0→17、（1九）7→80、（9二）64→9、（9九）71→72
+// -----
+int GetNozomiSquareFromGikou_9x8_black(int sq_gikou) {
+  int file = sq_gikou / 8;
+  int rank = sq_gikou % 8 + 1;
+
+  return GetNozomiSquare(file, rank);
+}
+
+// -----
+// Square内のインデックスを変換する。（技巧→nozomi）
+// ・sq_gikou： 0～62（1段目、2段目を除く）
+// ・戻り値  ：18～80（1段目、2段目を除く）
+// （例）（1三）0→26、（1九）6→80、（9三）56→18、（9九）62→72
+// -----
+int GetNozomiSquareFromGikou_9x7_black(int sq_gikou) {
+  int file = sq_gikou / 7;
+  int rank = sq_gikou % 7 + 2;
+
+  return GetNozomiSquare(file, rank);
+}
+
+// -----
+// Square内のインデックスを変換する。（技巧→nozomi）
+// ・sq_gikou：0～71（9段目を除く）
+// ・戻り値  ：0～71（9段目を除く）
+// （例）（1一）0→8、（1八）7→71、（9一）64→0、（9八）71→63
+// -----
+int GetNozomiSquareFromGikou_9x8_white(int sq_gikou) {
+  int file = sq_gikou / 8;
+  int rank = sq_gikou % 8;
+
+  return GetNozomiSquare(file, rank);
+}
+
+// -----
+// Square内のインデックスを変換する。（技巧→nozomi）
+// ・sq_gikou：0～62（8段目、9段目を除く）
+// ・戻り値  ：0～62（8段目、9段目を除く）
+// （例）（1一）0→8、（1七）6→62、（9一）56→0、（9七）62→54
+// -----
+int GetNozomiSquareFromGikou_9x7_white(int sq_gikou) {
+  int file = sq_gikou / 7;
+  int rank = sq_gikou % 7;
+
+  return GetNozomiSquare(file, rank);
+}
+
+void SetNozomiPsqIndexArray_normal(int gikou_index_start, int nozomi_index_start, int cnt) {
   int gikou_index = gikou_index_start;
-  int yaneuraou_classic_index = yaneuraou_classic_index_start;
+  int nozomi_index = nozomi_index_start;
 
   for (int i = 0; i < cnt; i++) {
-    yaneuraou_classic_psq_index_array[gikou_index] = yaneuraou_classic_index;
+    nozomi_psq_index_array[gikou_index] = nozomi_index;
 
     gikou_index++;
-    yaneuraou_classic_index++;
+    nozomi_index++;
   }
 }
 
-void InitYaneuraOuClassicPsqIndexArray() {
+void SetNozomiPsqIndexArray_9x9(int gikou_index_start, int nozomi_index_start) {
+  for (int sq_gikou = 0; sq_gikou < 81; sq_gikou++) {
+    int sq_nozomi = GetNozomiSquareFromGikou_9x9(sq_gikou);
 
-  // 技巧とやねうら王classicのPsqIndexの持ち方の違いに注意しながら、変換テーブルを初期化する。
+    nozomi_psq_index_array[gikou_index_start + sq_gikou] = nozomi_index_start + sq_nozomi;
+  }
+}
+
+void SetNozomiPsqIndexArray_9x8_black(int gikou_index_start, int nozomi_index_start) {
+  for (int sq_gikou = 0; sq_gikou < 72; sq_gikou++) {
+    int sq_nozomi = GetNozomiSquareFromGikou_9x8_black(sq_gikou);
+
+    nozomi_psq_index_array[gikou_index_start + sq_gikou] = nozomi_index_start + sq_nozomi;
+  }
+}
+
+void SetNozomiPsqIndexArray_9x7_black(int gikou_index_start, int nozomi_index_start) {
+  for (int sq_gikou = 0; sq_gikou < 63; sq_gikou++) {
+    int sq_nozomi = GetNozomiSquareFromGikou_9x7_black(sq_gikou);
+
+    nozomi_psq_index_array[gikou_index_start + sq_gikou] = nozomi_index_start + sq_nozomi;
+  }
+}
+
+void SetNozomiPsqIndexArray_9x8_white(int gikou_index_start, int nozomi_index_start) {
+  for (int sq_gikou = 0; sq_gikou < 72; sq_gikou++) {
+    int sq_nozomi = GetNozomiSquareFromGikou_9x8_white(sq_gikou);
+
+    nozomi_psq_index_array[gikou_index_start + sq_gikou] = nozomi_index_start + sq_nozomi;
+  }
+}
+
+void SetNozomiPsqIndexArray_9x7_white(int gikou_index_start, int nozomi_index_start) {
+  for (int sq_gikou = 0; sq_gikou < 63; sq_gikou++) {
+    int sq_nozomi = GetNozomiSquareFromGikou_9x7_white(sq_gikou);
+
+    nozomi_psq_index_array[gikou_index_start + sq_gikou] = nozomi_index_start + sq_nozomi;
+  }
+}
+
+void InitNozomiPsqIndexArray() {
+
+  // 技巧とnozomiのPsqIndexの持ち方の違いに注意しながら、変換テーブルを初期化する。
   // ・技巧：0～2109
-  // ・やねうら王classic：0～1534
-  // ・技巧はインデックスに隙間なし、やねうら王classicは隙間あり。
-  // ・技巧は「と～成銀」を「金」と区別するが、やねうら王classicは区別しない。
-  // ・技巧は「行きどころのない駒」を除外しているが、やねうら王classicは除外していない。
+  // ・nozomi：0～1547
+  // ・技巧はインデックスに隙間なし、nozomiは隙間あり。
+  // ・技巧は「と～成銀」を「金」と区別するが、nozomiは区別しない。
+  // ・技巧は「行きどころのない駒」を除外しているが、nozomiは除外していない。
   // ・盤上の駒の順序が異なる。
-
+  // ・Square内のインデックスが異なる。
+  //   技巧は  ｛右上（1一）が0、右下（1九）が8、左上（9一）が72、左下（9九）が80｝。
+  //   nozomiは｛左上（9一）が0、右上（1一）が8、左下（9九）が72、右下（1九）が80｝。
+  //
+  // ----- 技巧
+  //  各マスには、整数値が割り当てられています。
+  //  割り当てられている値は、将棋盤の右上（１一）が0で、左下（９九）が80です。
+  //  具体的には、以下のように割り当てられています。
+  //
+  //    9  8  7  6  5  4  3  2  1
+  // +----------------------------+
+  // | 72 63 54 45 36 27 18  9  0 | 一
+  // | 73 64 55 46 37 28 19 10  1 | 二
+  // | 74 65 56 47 38 29 20 11  2 | 三
+  // | 75 66 57 48 39 30 21 12  3 | 四
+  // | 76 67 58 49 40 31 22 13  4 | 五
+  // | 77 68 59 50 41 32 23 14  5 | 六
+  // | 78 69 60 51 42 33 24 15  6 | 七
+  // | 79 70 61 52 43 34 25 16  7 | 八
+  // | 80 71 62 53 44 35 26 17  8 | 九
+  // +----------------------------+
+  //
+  // ----- nozomi
+  // enum Square
+  // {
+  //   k9A = 0, k8A, k7A, k6A, k5A, k4A, k3A, k2A, k1A,
+  //   k9B, k8B, k7B, k6B, k5B, k4B, k3B, k2B, k1B,
+  //   k9C, k8C, k7C, k6C, k5C, k4C, k3C, k2C, k1C,
+  //   // x < k9Dの範囲が後手陣。先手にとって駒がなれるのはこの範囲。
+  //   k9D, k8D, k7D, k6D, k5D, k4D, k3D, k2D, k1D,
+  //   k9E, k8E, k7E, k6E, k5E, k4E, k3E, k2E, k1E,
+  //   k9F, k8F, k7F, k6F, k5F, k4F, k3F, k2F, k1F,
+  //   // x > k1Fの範囲が先手陣。後手にとって駒がなれるのはこの範囲。
+  //   k9G, k8G, k7G, k6G, k5G, k4G, k3G, k2G, k1G,
+  //   k9H, k8H, k7H, k6H, k5H, k4H, k3H, k2H, k1H,
+  //   k9I, k8I, k7I, k6I, k5I, k4I, k3I, k2I, k1I,
+  //   kBoardSquare,
+  //   （以下、省略）
+  // }
+  // -----
 
   // ----- 持ち駒
 
   // 先手の歩～飛
-  SetYaneuraOuClassicPsqIndexArray(0, 1, 18);
-  SetYaneuraOuClassicPsqIndexArray(18, 37, 4);
-  SetYaneuraOuClassicPsqIndexArray(22, 45, 4);
-  SetYaneuraOuClassicPsqIndexArray(26, 53, 4);
-  SetYaneuraOuClassicPsqIndexArray(30, 61, 4);
-  SetYaneuraOuClassicPsqIndexArray(34, 69, 2);
-  SetYaneuraOuClassicPsqIndexArray(36, 73, 2);
+  SetNozomiPsqIndexArray_normal(0, 1, 18);
+  SetNozomiPsqIndexArray_normal(18, 39, 4);
+  SetNozomiPsqIndexArray_normal(22, 49, 4);
+  SetNozomiPsqIndexArray_normal(26, 59, 4);
+  SetNozomiPsqIndexArray_normal(30, 69, 4);
+  SetNozomiPsqIndexArray_normal(34, 79, 2);
+  SetNozomiPsqIndexArray_normal(36, 85, 2);
 
   // 後手の歩～飛
-  SetYaneuraOuClassicPsqIndexArray(38, 19, 18);
-  SetYaneuraOuClassicPsqIndexArray(56, 41, 4);
-  SetYaneuraOuClassicPsqIndexArray(60, 49, 4);
-  SetYaneuraOuClassicPsqIndexArray(64, 57, 4);
-  SetYaneuraOuClassicPsqIndexArray(68, 65, 4);
-  SetYaneuraOuClassicPsqIndexArray(72, 71, 2);
-  SetYaneuraOuClassicPsqIndexArray(74, 75, 2);
+  SetNozomiPsqIndexArray_normal(38, 20, 18);
+  SetNozomiPsqIndexArray_normal(56, 44, 4);
+  SetNozomiPsqIndexArray_normal(60, 54, 4);
+  SetNozomiPsqIndexArray_normal(64, 64, 4);
+  SetNozomiPsqIndexArray_normal(68, 74, 4);
+  SetNozomiPsqIndexArray_normal(72, 82, 2);
+  SetNozomiPsqIndexArray_normal(74, 88, 2);
 
 
   // ----- 盤上の駒
 
+  // --- 先手
+
   // 先手の歩
-  SetYaneuraOuClassicPsqIndexArray(76, 78, 8);
-  SetYaneuraOuClassicPsqIndexArray(84, 87, 8);
-  SetYaneuraOuClassicPsqIndexArray(92, 96, 8);
-  SetYaneuraOuClassicPsqIndexArray(100, 105, 8);
-  SetYaneuraOuClassicPsqIndexArray(108, 114, 8);
-  SetYaneuraOuClassicPsqIndexArray(116, 123, 8);
-  SetYaneuraOuClassicPsqIndexArray(124, 132, 8);
-  SetYaneuraOuClassicPsqIndexArray(132, 141, 8);
-  SetYaneuraOuClassicPsqIndexArray(140, 150, 8);
+  SetNozomiPsqIndexArray_9x8_black(76, 90);
 
   // 先手の香
-  SetYaneuraOuClassicPsqIndexArray(148, 240, 8);
-  SetYaneuraOuClassicPsqIndexArray(156, 249, 8);
-  SetYaneuraOuClassicPsqIndexArray(164, 258, 8);
-  SetYaneuraOuClassicPsqIndexArray(172, 267, 8);
-  SetYaneuraOuClassicPsqIndexArray(180, 276, 8);
-  SetYaneuraOuClassicPsqIndexArray(188, 285, 8);
-  SetYaneuraOuClassicPsqIndexArray(196, 294, 8);
-  SetYaneuraOuClassicPsqIndexArray(204, 303, 8);
-  SetYaneuraOuClassicPsqIndexArray(212, 312, 8);
+  SetNozomiPsqIndexArray_9x8_black(148, 252);
 
   // 先手の桂
-  SetYaneuraOuClassicPsqIndexArray(220, 403, 7);
-  SetYaneuraOuClassicPsqIndexArray(227, 412, 7);
-  SetYaneuraOuClassicPsqIndexArray(234, 421, 7);
-  SetYaneuraOuClassicPsqIndexArray(241, 430, 7);
-  SetYaneuraOuClassicPsqIndexArray(248, 439, 7);
-  SetYaneuraOuClassicPsqIndexArray(255, 448, 7);
-  SetYaneuraOuClassicPsqIndexArray(262, 457, 7);
-  SetYaneuraOuClassicPsqIndexArray(269, 466, 7);
-  SetYaneuraOuClassicPsqIndexArray(276, 475, 7);
+  SetNozomiPsqIndexArray_9x7_black(220, 414);
 
-  // 先手の銀～飛、と～龍
-  SetYaneuraOuClassicPsqIndexArray(283, 563, 81);
-  SetYaneuraOuClassicPsqIndexArray(364, 725, 81);
-  SetYaneuraOuClassicPsqIndexArray(445, 887, 81);
-  SetYaneuraOuClassicPsqIndexArray(526, 1211, 81);
-  SetYaneuraOuClassicPsqIndexArray(607, 725, 81);
-  SetYaneuraOuClassicPsqIndexArray(688, 725, 81);
-  SetYaneuraOuClassicPsqIndexArray(769, 725, 81);
-  SetYaneuraOuClassicPsqIndexArray(850, 725, 81);
-  SetYaneuraOuClassicPsqIndexArray(931, 1049, 81);
-  SetYaneuraOuClassicPsqIndexArray(1012, 1373, 81);
+  // 先手の銀～飛
+  SetNozomiPsqIndexArray_9x9(283, 576);
+  SetNozomiPsqIndexArray_9x9(364, 738);
+  SetNozomiPsqIndexArray_9x9(445, 900);
+  SetNozomiPsqIndexArray_9x9(526, 1224);
+
+  // 先手のと～龍
+  SetNozomiPsqIndexArray_9x9(607, 738);
+  SetNozomiPsqIndexArray_9x9(688, 738);
+  SetNozomiPsqIndexArray_9x9(769, 738);
+  SetNozomiPsqIndexArray_9x9(850, 738);
+  SetNozomiPsqIndexArray_9x9(931, 1062);
+  SetNozomiPsqIndexArray_9x9(1012, 1386);
+
+
+  // --- 後手
 
   // 後手の歩
-  SetYaneuraOuClassicPsqIndexArray(1093, 158, 8);
-  SetYaneuraOuClassicPsqIndexArray(1101, 167, 8);
-  SetYaneuraOuClassicPsqIndexArray(1109, 176, 8);
-  SetYaneuraOuClassicPsqIndexArray(1117, 185, 8);
-  SetYaneuraOuClassicPsqIndexArray(1125, 194, 8);
-  SetYaneuraOuClassicPsqIndexArray(1133, 203, 8);
-  SetYaneuraOuClassicPsqIndexArray(1141, 212, 8);
-  SetYaneuraOuClassicPsqIndexArray(1149, 221, 8);
-  SetYaneuraOuClassicPsqIndexArray(1157, 230, 8);
+  SetNozomiPsqIndexArray_9x8_white(1093, 171);
 
   // 後手の香
-  SetYaneuraOuClassicPsqIndexArray(1165, 320, 8);
-  SetYaneuraOuClassicPsqIndexArray(1173, 329, 8);
-  SetYaneuraOuClassicPsqIndexArray(1181, 338, 8);
-  SetYaneuraOuClassicPsqIndexArray(1189, 347, 8);
-  SetYaneuraOuClassicPsqIndexArray(1197, 356, 8);
-  SetYaneuraOuClassicPsqIndexArray(1205, 365, 8);
-  SetYaneuraOuClassicPsqIndexArray(1213, 374, 8);
-  SetYaneuraOuClassicPsqIndexArray(1221, 383, 8);
-  SetYaneuraOuClassicPsqIndexArray(1229, 392, 8);
+  SetNozomiPsqIndexArray_9x8_white(1165, 333);
 
   // 後手の桂
-  SetYaneuraOuClassicPsqIndexArray(1237, 482, 7);
-  SetYaneuraOuClassicPsqIndexArray(1244, 491, 7);
-  SetYaneuraOuClassicPsqIndexArray(1251, 500, 7);
-  SetYaneuraOuClassicPsqIndexArray(1258, 509, 7);
-  SetYaneuraOuClassicPsqIndexArray(1265, 518, 7);
-  SetYaneuraOuClassicPsqIndexArray(1272, 527, 7);
-  SetYaneuraOuClassicPsqIndexArray(1279, 536, 7);
-  SetYaneuraOuClassicPsqIndexArray(1286, 545, 7);
-  SetYaneuraOuClassicPsqIndexArray(1293, 554, 7);
+  SetNozomiPsqIndexArray_9x7_white(1237, 495);
 
-  // 後手の銀～飛、と～龍
-  SetYaneuraOuClassicPsqIndexArray(1300, 644, 81);
-  SetYaneuraOuClassicPsqIndexArray(1381, 806, 81);
-  SetYaneuraOuClassicPsqIndexArray(1462, 968, 81);
-  SetYaneuraOuClassicPsqIndexArray(1543, 1292, 81);
-  SetYaneuraOuClassicPsqIndexArray(1624, 806, 81);
-  SetYaneuraOuClassicPsqIndexArray(1705, 806, 81);
-  SetYaneuraOuClassicPsqIndexArray(1786, 806, 81);
-  SetYaneuraOuClassicPsqIndexArray(1867, 806, 81);
-  SetYaneuraOuClassicPsqIndexArray(1948, 1130, 81);
-  SetYaneuraOuClassicPsqIndexArray(2029, 1454, 81);
+  // 後手の銀～飛
+  SetNozomiPsqIndexArray_9x9(1300, 657);
+  SetNozomiPsqIndexArray_9x9(1381, 819);
+  SetNozomiPsqIndexArray_9x9(1462, 981);
+  SetNozomiPsqIndexArray_9x9(1543, 1305);
+
+  // 後手のと～龍
+  SetNozomiPsqIndexArray_9x9(1624, 819);
+  SetNozomiPsqIndexArray_9x9(1705, 819);
+  SetNozomiPsqIndexArray_9x9(1786, 819);
+  SetNozomiPsqIndexArray_9x9(1867, 819);
+  SetNozomiPsqIndexArray_9x9(1948, 1143);
+  SetNozomiPsqIndexArray_9x9(2029, 1467);
 
 }
 
+// psq関連のテスト（デバッグ用）
+void TestPsq() {
+
+  // ----- 9x9
+  int sq_nozomi[8] = {  0, 8,  9, 17, 18, 26, 72, 80 };
+  int sq_gikou [8] = { 72, 0, 73,  1, 74,  2, 80,  8 };
+
+  for (int i = 0; i < 8; i++ ) {
+    std::printf("GetGikouSquareFromNozomi_9x9(%d)=%d\n", sq_nozomi[i], GetGikouSquareFromNozomi_9x9(sq_nozomi[i]));
+    std::printf("GetNozomiSquareFromGikou_9x9(%d)=%d\n", sq_gikou [i], GetNozomiSquareFromGikou_9x9(sq_gikou [i]));
+  }
+
+
+  // ----- 9x8_black
+  int sq_gikou_9x8_black[4] = { 0, 7, 64, 71 };
+
+  for (int i = 0; i < 4; i++ ) {
+    std::printf("GetNozomiSquareFromGikou_9x8_black(%d)=%d\n", sq_gikou_9x8_black[i], GetNozomiSquareFromGikou_9x8_black(sq_gikou_9x8_black[i]));
+  }
+
+
+  // ----- 9x7_black
+  int sq_gikou_9x7_black[4] = { 0, 6, 56, 62 };
+
+  for (int i = 0; i < 4; i++ ) {
+    std::printf("GetNozomiSquareFromGikou_9x7_black(%d)=%d\n", sq_gikou_9x7_black[i], GetNozomiSquareFromGikou_9x7_black(sq_gikou_9x7_black[i]));
+  }
+
+
+  // ----- 9x8_white
+  int sq_gikou_9x8_white[4] = { 0, 7, 64, 71 };
+
+  for (int i = 0; i < 4; i++ ) {
+    std::printf("GetNozomiSquareFromGikou_9x8_white(%d)=%d\n", sq_gikou_9x8_white[i], GetNozomiSquareFromGikou_9x8_white(sq_gikou_9x8_white[i]));
+  }
+
+
+  // ----- 9x7_white
+  int sq_gikou_9x7_white[4] = { 0, 6, 56, 62 };
+
+  for (int i = 0; i < 4; i++ ) {
+    std::printf("GetNozomiSquareFromGikou_9x7_white(%d)=%d\n", sq_gikou_9x7_white[i], GetNozomiSquareFromGikou_9x7_white(sq_gikou_9x7_white[i]));
+  }
+
+}

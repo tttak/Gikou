@@ -28,13 +28,13 @@
 #include "usi.h"
 #include "usi_protocol.h"
 
-// やねうら王classicの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-int g_YaneuraOuClassicEvalOpening;
-int g_YaneuraOuClassicEvalMiddleGame;
-int g_YaneuraOuClassicEvalEndGame;
+// nozomiの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+int g_NozomiEvalOpening;
+int g_NozomiEvalMiddleGame;
+int g_NozomiEvalEndGame;
 
-// やねうら王classicの評価関数バイナリのフォルダ
-std::string g_YaneuraOuClassicEvalFolder;
+// nozomiの評価関数バイナリのフォルダ
+std::string g_NozomiEvalFolder;
 
 namespace {
 
@@ -52,13 +52,13 @@ void Thinking::Initialize() {
   book_.ReadFromFile(kBookFile);
   shared_data_.hash_table.SetSize(usi_options_["USI_Hash"]);
 
-  // やねうら王classicの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-  g_YaneuraOuClassicEvalOpening    = usi_options_["Z11_YaneuraOuClassicEvalJoban"];
-  g_YaneuraOuClassicEvalMiddleGame = usi_options_["Z12_YaneuraOuClassicEvalChuban"];
-  g_YaneuraOuClassicEvalEndGame    = usi_options_["Z13_YaneuraOuClassicEvalShuban"];
+  // nozomiの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+  g_NozomiEvalOpening    = usi_options_["Z11_NozomiEvalJoban"];
+  g_NozomiEvalMiddleGame = usi_options_["Z12_NozomiEvalChuban"];
+  g_NozomiEvalEndGame    = usi_options_["Z13_NozomiEvalShuban"];
 
-  // やねうら王classicの評価関数バイナリのフォルダ
-  g_YaneuraOuClassicEvalFolder = usi_options_["Z14_YaneuraOuClassicEvalFolder"].str_value();
+  // nozomiの評価関数バイナリのフォルダ
+  g_NozomiEvalFolder = usi_options_["Z14_NozomiEvalFolder"].str_value();
 }
 
 void Thinking::StartNewGame() {

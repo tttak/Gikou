@@ -67,11 +67,11 @@ constexpr int32_t kFvScale = 1 << 16;
 typedef Pack<int32_t, 4> PackedScore;
 
 /**
- * やねうら王classicの評価値の詳細を保存するためのクラスです.
+ * nozomiの評価値の詳細を保存するためのクラスです.
  */
-struct YaneuraOuClassicEvalDetail {
+struct NozomiEvalDetail {
 
-  YaneuraOuClassicEvalDetail() {
+  NozomiEvalDetail() {
     Clear();
   }
 
@@ -79,17 +79,17 @@ struct YaneuraOuClassicEvalDetail {
     std::memset(this, 0, sizeof(*this));
   }
 
-  YaneuraOuClassicEvalDetail operator+(const YaneuraOuClassicEvalDetail& rhs) const {
-    return YaneuraOuClassicEvalDetail(*this) += rhs;
+  NozomiEvalDetail operator+(const NozomiEvalDetail& rhs) const {
+    return NozomiEvalDetail(*this) += rhs;
   }
 
-  YaneuraOuClassicEvalDetail operator-(const YaneuraOuClassicEvalDetail& rhs) const {
-    return YaneuraOuClassicEvalDetail(*this) -= rhs;
+  NozomiEvalDetail operator-(const NozomiEvalDetail& rhs) const {
+    return NozomiEvalDetail(*this) -= rhs;
   }
 
-  YaneuraOuClassicEvalDetail& operator+=(const YaneuraOuClassicEvalDetail& rhs) {
+  NozomiEvalDetail& operator+=(const NozomiEvalDetail& rhs) {
     material += rhs.material;
-    kk_board += rhs.kk_board;
+    //kk_board += rhs.kk_board;
     kkp_board += rhs.kkp_board;
     kpp_board[kBlack] += rhs.kpp_board[kBlack];
     kpp_board[kWhite] += rhs.kpp_board[kWhite];
@@ -97,9 +97,9 @@ struct YaneuraOuClassicEvalDetail {
     return *this;
   }
 
-  YaneuraOuClassicEvalDetail& operator-=(const YaneuraOuClassicEvalDetail& rhs) {
+  NozomiEvalDetail& operator-=(const NozomiEvalDetail& rhs) {
     material -= rhs.material;
-    kk_board -= rhs.kk_board;
+    //kk_board -= rhs.kk_board;
     kkp_board -= rhs.kkp_board;
     kpp_board[kBlack] -= rhs.kpp_board[kBlack];
     kpp_board[kWhite] -= rhs.kpp_board[kWhite];
@@ -108,14 +108,14 @@ struct YaneuraOuClassicEvalDetail {
   }
 
   /**
-   * やねうら王classicの評価値を計算します.
+   * nozomiの評価値を計算します.
    * @param side_to_move 手番
-   * @return やねうら王classicの評価値（手番側から見た評価値）
+   * @return nozomiの評価値（手番側から見た評価値）
    */
   int32_t Sum(const Color side_to_move) const;
 
   /**
-   * やねうら王classicの評価値の情報を標準出力へ出力します.
+   * nozomiの評価値の情報を標準出力へ出力します.
    * @param side_to_move 手番
    */
   void Print(const Color side_to_move) const;
@@ -124,7 +124,8 @@ struct YaneuraOuClassicEvalDetail {
   int32_t material;
 
   /** KK（King-King）に関する評価値（駒の位置のみ、手番なし）. */
-  int32_t kk_board;
+  // ・nozomiにはKKは存在しない
+  //int32_t kk_board;
 
   /** KKP（King-King-Piece）に関する評価値（駒の位置のみ、手番なし）. */
   int32_t kkp_board;
@@ -153,7 +154,7 @@ struct EvalDetail {
     two_pieces  += rhs.two_pieces;
     king_safety += rhs.king_safety;
     sliders     += rhs.sliders;
-    yaneuraou_classic_eval_detail += rhs.yaneuraou_classic_eval_detail;
+    nozomi_eval_detail += rhs.nozomi_eval_detail;
     return *this;
   }
 
@@ -164,7 +165,7 @@ struct EvalDetail {
     two_pieces  -= rhs.two_pieces;
     king_safety -= rhs.king_safety;
     sliders     -= rhs.sliders;
-    yaneuraou_classic_eval_detail -= rhs.yaneuraou_classic_eval_detail;
+    nozomi_eval_detail -= rhs.nozomi_eval_detail;
     return *this;
   }
 
@@ -197,8 +198,8 @@ struct EvalDetail {
   /** 飛び駒に関する評価値. */
   PackedScore sliders{0};
 
-  /** やねうら王classicの評価値. */
-  YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
+  /** nozomiの評価値. */
+  NozomiEvalDetail nozomi_eval_detail;
 };
 
 /**
@@ -318,31 +319,36 @@ extern std::unique_ptr<EvalParameters> g_eval_params;
 
 
 /**
- * やねうら王classicの評価値関連
+ * nozomiの評価値関連
  */
-namespace YaneuraOuClassicEval {
+namespace NozomiEval {
 
   /** KPPのスケール */
   const int FV_SCALE = 32;
 
-  /** KK、KKPのスケール（32倍のさらに512倍） */
-  const int FV_SCALE_KK_KKP = 512;
+  /** KK、KKPのスケール */
+  // やねうら王では512（32倍のさらに512倍）だが、nozomiでは1（32倍）。
+  const int FV_SCALE_KK_KKP = 1;
 
-  /** やねうら王classicの駒割り */
+  /** 手番 */
+  // このバージョンのnozomiでは、手番の評価は固定値80。
+  const int kTempo = 80;
+
+  /** nozomiの駒割り */
   enum {
     PawnValue = 86,
-    LanceValue = 227,
-    KnightValue = 256,
-    SilverValue = 365,
-    GoldValue = 439,
-    BishopValue = 563,
-    RookValue = 629,
-    ProPawnValue = 540,
-    ProLanceValue = 508,
-    ProKnightValue = 517,
-    ProSilverValue = 502,
-    HorseValue = 826,
-    DragonValue = 942,
+    LanceValue = 235,
+    KnightValue = 257,
+    SilverValue = 369,
+    GoldValue = 444,
+    BishopValue = 564,
+    RookValue = 637,
+    ProPawnValue = 542,
+    ProLanceValue = 492,
+    ProKnightValue = 516,
+    ProSilverValue = 489,
+    HorseValue = 823,
+    DragonValue = 946,
     KingValue = 15000,
   };
 
@@ -357,7 +363,7 @@ namespace YaneuraOuClassicEval {
    * @param psq_list 駒の位置のインデックスのリスト
    * @return 評価項目ごとの評価値
    */
-  YaneuraOuClassicEvalDetail ComputeEval(const Position& pos, const PsqList& list);
+  NozomiEvalDetail ComputeEval(const Position& pos, const PsqList& list);
 
   /**
    * 駒割りを全計算します.
@@ -374,14 +380,14 @@ namespace YaneuraOuClassicEval {
   Score EvaluateDifferenceOfMaterial(const Position& pos);
 
   /**
-   * やねうら王classicの生の評価値を１歩＝１００点（centipawn）の評価値に変換します.
+   * nozomiの生の評価値を１歩＝１００点（centipawn）の評価値に変換します.
    * @param value 生の評価値
    * @return １歩＝１００点（centipawn）の評価値
    */
   double ToCentiPawn(const int32_t value);
 
   /**
-   * やねうら王classicの生の評価値を１歩＝１００点（centipawn）の評価値（手番側から見た評価値）に変換します.
+   * nozomiの生の評価値を１歩＝１００点（centipawn）の評価値（手番側から見た評価値）に変換します.
    * @param value 生の評価値
    * @param side_to_move 手番
    * @return １歩＝１００点（centipawn）の評価値（手番側から見た評価値）

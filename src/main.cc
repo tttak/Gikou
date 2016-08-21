@@ -51,8 +51,8 @@ int main(int argc, char **argv) {
   Material::Init();
   MoveProbability::Init();
 
-  // やねうら王classic評価関数用のPsqIndexへの変換テーブルを初期化する
-  InitYaneuraOuClassicPsqIndexArray();
+  // nozomi評価関数用のPsqIndexへの変換テーブルを初期化する
+  InitNozomiPsqIndexArray();
 
 #ifdef UNIT_TEST
   // Google Test によるユニットテストを行う
