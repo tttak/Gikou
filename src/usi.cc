@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou AperyEvalMix 20160803";
+const auto kProgramName = "Gikou AperyEvalMix 20160905";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -213,10 +213,17 @@ void ExecuteCommand(const std::string& command, Node* const node,
 
   } else if (type == "isready") {
     thinking->Initialize();
-    Evaluation::ReadParametersFromFile("params.bin");
 
-    // Aperyの評価関数ファイルの読込み
-    AperyEval::LoadEval();
+    // 評価関数ファイルの読込みは初回のみにする
+    static bool first = true;
+    if (first) {
+      first = false;
+
+      Evaluation::ReadParametersFromFile("params.bin");
+
+      // Aperyの評価関数ファイルの読込み
+      AperyEval::LoadEval();
+    }
 
     SYNCED_PRINTF("readyok\n");
 
