@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou NozomiEvalMix 20160821";
+const auto kProgramName = "Gikou NozomiEvalMix 20160912";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -87,7 +87,12 @@ void ReceiveCommands(CommandQueue* const queue, Thinking* const thinking) {
   assert(thinking != nullptr);
 
   // 標準入力から1行ずつ読み込む
-  for (std::string command; std::getline(std::cin, command);) {
+  //for (std::string command; std::getline(std::cin, command);) {
+  for (std::string command; ;) {
+    if (!std::getline(std::cin, command)) {
+      command = "quit";
+    }
+
     std::istringstream is(command);
     std::string type;
     is >> type;
@@ -213,10 +218,17 @@ void ExecuteCommand(const std::string& command, Node* const node,
 
   } else if (type == "isready") {
     thinking->Initialize();
-    Evaluation::ReadParametersFromFile("params.bin");
 
-    // nozomiの評価関数ファイルの読込み
-    NozomiEval::LoadEval();
+    // 評価関数ファイルの読込みは初回のみにする
+    static bool first = true;
+    if (first) {
+      first = false;
+
+      Evaluation::ReadParametersFromFile("params.bin");
+
+      // nozomiの評価関数ファイルの読込み
+      NozomiEval::LoadEval();
+    }
 
     SYNCED_PRINTF("readyok\n");
 
