@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou AperyEvalMix 20160905";
+const auto kProgramName = "Gikou AperyEvalMix 20160912";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -87,7 +87,12 @@ void ReceiveCommands(CommandQueue* const queue, Thinking* const thinking) {
   assert(thinking != nullptr);
 
   // 標準入力から1行ずつ読み込む
-  for (std::string command; std::getline(std::cin, command);) {
+  //for (std::string command; std::getline(std::cin, command);) {
+  for (std::string command; ;) {
+    if (!std::getline(std::cin, command)) {
+      command = "quit";
+    }
+
     std::istringstream is(command);
     std::string type;
     is >> type;
