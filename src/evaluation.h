@@ -68,6 +68,8 @@ typedef Pack<int32_t, 4> PackedScore;
 
 /**
  * Aperyの評価値の詳細を保存するためのクラスです.
+ * ・試験的に手番の評価をなくしたバージョン。KPPTではなくKPP。
+ * ・評価関数の精度は下がるが、npsは向上する。
  */
 struct AperyEvalDetail {
 
@@ -90,13 +92,13 @@ struct AperyEvalDetail {
   AperyEvalDetail& operator+=(const AperyEvalDetail& rhs) {
     material += rhs.material;
     kk_board += rhs.kk_board;
-    kk_turn += rhs.kk_turn;
+    //kk_turn += rhs.kk_turn;
     kkp_board += rhs.kkp_board;
-    kkp_turn += rhs.kkp_turn;
+    //kkp_turn += rhs.kkp_turn;
     kpp_board[kBlack] += rhs.kpp_board[kBlack];
-    kpp_turn [kBlack] += rhs.kpp_turn [kBlack];
+    //kpp_turn [kBlack] += rhs.kpp_turn [kBlack];
     kpp_board[kWhite] += rhs.kpp_board[kWhite];
-    kpp_turn [kWhite] += rhs.kpp_turn [kWhite];
+    //kpp_turn [kWhite] += rhs.kpp_turn [kWhite];
 
     return *this;
   }
@@ -104,13 +106,13 @@ struct AperyEvalDetail {
   AperyEvalDetail& operator-=(const AperyEvalDetail& rhs) {
     material -= rhs.material;
     kk_board -= rhs.kk_board;
-    kk_turn -= rhs.kk_turn;
+    //kk_turn -= rhs.kk_turn;
     kkp_board -= rhs.kkp_board;
-    kkp_turn -= rhs.kkp_turn;
+    //kkp_turn -= rhs.kkp_turn;
     kpp_board[kBlack] -= rhs.kpp_board[kBlack];
-    kpp_turn [kBlack] -= rhs.kpp_turn [kBlack];
+    //kpp_turn [kBlack] -= rhs.kpp_turn [kBlack];
     kpp_board[kWhite] -= rhs.kpp_board[kWhite];
-    kpp_turn [kWhite] -= rhs.kpp_turn [kWhite];
+    //kpp_turn [kWhite] -= rhs.kpp_turn [kWhite];
 
     return *this;
   }
@@ -133,15 +135,15 @@ struct AperyEvalDetail {
 
   /** KK（King-King）に関する評価値（駒の位置、手番）. */
   int32_t kk_board;
-  int32_t kk_turn;
+  //int32_t kk_turn;
 
   /** KKP（King-King-Piece）に関する評価値（駒の位置、手番）. */
   int32_t kkp_board;
-  int32_t kkp_turn;
+  //int32_t kkp_turn;
 
   /** KPP（King-Piece-Piece）に関する評価値（駒の位置、手番）. */
   int32_t kpp_board[2];
-  int32_t kpp_turn [2];
+  //int32_t kpp_turn [2];
 };
 
 /**
@@ -355,10 +357,10 @@ namespace AperyEval {
   };
 
   /** 駒の位置、手番 */
-  enum {
-      kBoard
-    , kTurn
-  };
+  //enum {
+  //    kBoard
+  //  , kTurn
+  //};
 
   /**
    * 評価関数ファイルを読み込みます.

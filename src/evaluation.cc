@@ -48,9 +48,12 @@ typedef std::array<int32_t, 2> ValueKkp;
 typedef std::array<int16_t, 2> ValueKpp;
 
 // Aperyの評価関数パラメータ（技巧のPsqIndexへの変換後）
-ValueKk  kk_apery [81][81];
-ValueKkp kkp_apery[81][81][2110];
-ValueKpp kpp_apery[81][2110][2110];
+//ValueKk  kk_apery [81][81];
+//ValueKkp kkp_apery[81][81][2110];
+//ValueKpp kpp_apery[81][2110][2110];
+int32_t kk_apery [81][81];
+int32_t kkp_apery[81][81][2110];
+int16_t kpp_apery[81][2110][2110];
 
 
 Score EvalDetail::ComputeFinalScore(Color side_to_move,
@@ -200,16 +203,19 @@ inline EvalDetail SumPositionalScore(const PsqPair psq, const PsqList& list,
   const Square sq_wk = pos.king_square(kWhite);
 
   // KKP
-  apery_eval_detail.kkp_board = kkp_apery[bk][sq_wk][psq.black()][AperyEval::kBoard];
-  apery_eval_detail.kkp_turn  = kkp_apery[bk][sq_wk][psq.black()][AperyEval::kTurn];
+  //apery_eval_detail.kkp_board = kkp_apery[bk][sq_wk][psq.black()][AperyEval::kBoard];
+  //apery_eval_detail.kkp_turn  = kkp_apery[bk][sq_wk][psq.black()][AperyEval::kTurn];
+  apery_eval_detail.kkp_board = kkp_apery[bk][sq_wk][psq.black()];
 
   for (const PsqPair& j : list) {
     if (j.black() != psq.black()) {
       // KPP
-      apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq.black()][j.black()][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kBlack] += kpp_apery[bk][psq.black()][j.black()][AperyEval::kTurn];
-      apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq.white()][j.white()][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kWhite] += kpp_apery[wk][psq.white()][j.white()][AperyEval::kTurn];
+      //apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq.black()][j.black()][AperyEval::kBoard];
+      //apery_eval_detail.kpp_turn [kBlack] += kpp_apery[bk][psq.black()][j.black()][AperyEval::kTurn];
+      //apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq.white()][j.white()][AperyEval::kBoard];
+      //apery_eval_detail.kpp_turn [kWhite] += kpp_apery[wk][psq.white()][j.white()][AperyEval::kTurn];
+      apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq.black()][j.black()];
+      apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq.white()][j.white()];
     }
   }
 
@@ -255,19 +261,23 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   const Square sq_wk = pos.king_square(kWhite);
 
   // KKP
-  apery_eval_detail.kkp_board = kkp_apery[bk][sq_wk][psq1.black()][AperyEval::kBoard]
-                              + kkp_apery[bk][sq_wk][psq2.black()][AperyEval::kBoard];
-  apery_eval_detail.kkp_turn  = kkp_apery[bk][sq_wk][psq1.black()][AperyEval::kTurn]
-                              + kkp_apery[bk][sq_wk][psq2.black()][AperyEval::kTurn];
+  //apery_eval_detail.kkp_board = kkp_apery[bk][sq_wk][psq1.black()][AperyEval::kBoard]
+  //                            + kkp_apery[bk][sq_wk][psq2.black()][AperyEval::kBoard];
+  //apery_eval_detail.kkp_turn  = kkp_apery[bk][sq_wk][psq1.black()][AperyEval::kTurn]
+  //                            + kkp_apery[bk][sq_wk][psq2.black()][AperyEval::kTurn];
+  apery_eval_detail.kkp_board = kkp_apery[bk][sq_wk][psq1.black()]
+                              + kkp_apery[bk][sq_wk][psq2.black()];
 
   // 駒１のKPP
   for (const PsqPair& j : list) {
     if (j.black() != psq1.black()) {
       // KPP
-      apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq1.black()][j.black()][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kBlack] += kpp_apery[bk][psq1.black()][j.black()][AperyEval::kTurn];
-      apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq1.white()][j.white()][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kWhite] += kpp_apery[wk][psq1.white()][j.white()][AperyEval::kTurn];
+      //apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq1.black()][j.black()][AperyEval::kBoard];
+      //apery_eval_detail.kpp_turn [kBlack] += kpp_apery[bk][psq1.black()][j.black()][AperyEval::kTurn];
+      //apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq1.white()][j.white()][AperyEval::kBoard];
+      //apery_eval_detail.kpp_turn [kWhite] += kpp_apery[wk][psq1.white()][j.white()][AperyEval::kTurn];
+      apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq1.black()][j.black()];
+      apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq1.white()][j.white()];
     }
   }
 
@@ -275,19 +285,23 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   for (const PsqPair& j : list) {
     if (j.black() != psq2.black()) {
       // KPP
-      apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq2.black()][j.black()][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kBlack] += kpp_apery[bk][psq2.black()][j.black()][AperyEval::kTurn];
-      apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq2.white()][j.white()][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kWhite] += kpp_apery[wk][psq2.white()][j.white()][AperyEval::kTurn];
+      //apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq2.black()][j.black()][AperyEval::kBoard];
+      //apery_eval_detail.kpp_turn [kBlack] += kpp_apery[bk][psq2.black()][j.black()][AperyEval::kTurn];
+      //apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq2.white()][j.white()][AperyEval::kBoard];
+      //apery_eval_detail.kpp_turn [kWhite] += kpp_apery[wk][psq2.white()][j.white()][AperyEval::kTurn];
+      apery_eval_detail.kpp_board[kBlack] += kpp_apery[bk][psq2.black()][j.black()];
+      apery_eval_detail.kpp_board[kWhite] += kpp_apery[wk][psq2.white()][j.white()];
     }
   }
 
 
   // 5. AperyのKPP計算で重複して加算されてしまった部分を補正する
-  apery_eval_detail.kpp_board[kBlack] -= kpp_apery[bk][psq1.black()][psq2.black()][AperyEval::kBoard];
-  apery_eval_detail.kpp_turn [kBlack] -= kpp_apery[bk][psq1.black()][psq2.black()][AperyEval::kTurn];
-  apery_eval_detail.kpp_board[kWhite] -= kpp_apery[wk][psq1.white()][psq2.white()][AperyEval::kBoard];
-  apery_eval_detail.kpp_turn [kWhite] -= kpp_apery[wk][psq1.white()][psq2.white()][AperyEval::kTurn];
+  //apery_eval_detail.kpp_board[kBlack] -= kpp_apery[bk][psq1.black()][psq2.black()][AperyEval::kBoard];
+  //apery_eval_detail.kpp_turn [kBlack] -= kpp_apery[bk][psq1.black()][psq2.black()][AperyEval::kTurn];
+  //apery_eval_detail.kpp_board[kWhite] -= kpp_apery[wk][psq1.white()][psq2.white()][AperyEval::kBoard];
+  //apery_eval_detail.kpp_turn [kWhite] -= kpp_apery[wk][psq1.white()][psq2.white()][AperyEval::kTurn];
+  apery_eval_detail.kpp_board[kBlack] -= kpp_apery[bk][psq1.black()][psq2.black()];
+  apery_eval_detail.kpp_board[kWhite] -= kpp_apery[wk][psq1.white()][psq2.white()];
 
   // -----
 
@@ -618,45 +632,49 @@ EvalDetail EvaluateDifferenceForKingMove(const Position& pos,
   const Square inv_sq_wk = Square::rotate180(sq_wk);
 
   // KK
-  apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk][AperyEval::kBoard];
-  apery_eval_detail.kk_turn  = kk_apery[sq_bk][sq_wk][AperyEval::kTurn];
+  //apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk][AperyEval::kBoard];
+  //apery_eval_detail.kk_turn  = kk_apery[sq_bk][sq_wk][AperyEval::kTurn];
+  apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk];
 
   diff.apery_eval_detail.kk_board = apery_eval_detail.kk_board - previous_eval.apery_eval_detail.kk_board;
-  diff.apery_eval_detail.kk_turn  = apery_eval_detail.kk_turn  - previous_eval.apery_eval_detail.kk_turn;
+  //diff.apery_eval_detail.kk_turn  = apery_eval_detail.kk_turn  - previous_eval.apery_eval_detail.kk_turn;
 
 
   // KKP
   for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
-    apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kBoard];
-    apery_eval_detail.kkp_turn  += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kTurn];
+    //apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kBoard];
+    //apery_eval_detail.kkp_turn  += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kTurn];
+    apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i->black()];
   }
 
   diff.apery_eval_detail.kkp_board = apery_eval_detail.kkp_board - previous_eval.apery_eval_detail.kkp_board;
-  diff.apery_eval_detail.kkp_turn  = apery_eval_detail.kkp_turn  - previous_eval.apery_eval_detail.kkp_turn;
+  //diff.apery_eval_detail.kkp_turn  = apery_eval_detail.kkp_turn  - previous_eval.apery_eval_detail.kkp_turn;
 
 
   // KPP
   if (king_color == kBlack) {
     for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
       for (const PsqPair* j = list->begin(); j < i; ++j) {
-        apery_eval_detail.kpp_board[kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kBoard];
-        apery_eval_detail.kpp_turn [kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kTurn];
+        //apery_eval_detail.kpp_board[kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kBoard];
+        //apery_eval_detail.kpp_turn [kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kTurn];
+        apery_eval_detail.kpp_board[kBlack] += kpp_apery[sq_bk][i->black()][j->black()];
       }
     }
 
     diff.apery_eval_detail.kpp_board[kBlack] = apery_eval_detail.kpp_board[kBlack] - previous_eval.apery_eval_detail.kpp_board[kBlack];
-    diff.apery_eval_detail.kpp_turn [kBlack] = apery_eval_detail.kpp_turn [kBlack] - previous_eval.apery_eval_detail.kpp_turn [kBlack];
+    //diff.apery_eval_detail.kpp_turn [kBlack] = apery_eval_detail.kpp_turn [kBlack] - previous_eval.apery_eval_detail.kpp_turn [kBlack];
 
   } else {
     for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
       for (const PsqPair* j = list->begin(); j < i; ++j) {
-        apery_eval_detail.kpp_board[kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kBoard];
-        apery_eval_detail.kpp_turn [kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kTurn];
+        //apery_eval_detail.kpp_board[kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kBoard];
+        //apery_eval_detail.kpp_turn [kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kTurn];
+        apery_eval_detail.kpp_board[kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()];
       }
     }
 
     diff.apery_eval_detail.kpp_board[kWhite] = apery_eval_detail.kpp_board[kWhite] - previous_eval.apery_eval_detail.kpp_board[kWhite];
-    diff.apery_eval_detail.kpp_turn [kWhite] = apery_eval_detail.kpp_turn [kWhite] - previous_eval.apery_eval_detail.kpp_turn [kWhite];
+    //diff.apery_eval_detail.kpp_turn [kWhite] = apery_eval_detail.kpp_turn [kWhite] - previous_eval.apery_eval_detail.kpp_turn [kWhite];
   }
 
   return diff;
@@ -868,6 +886,7 @@ void AperyEval::LoadEval() {
 
   //----- Aperyの評価関数ファイルの読込み（KK）
   // ・KKはPsqIndexの変換が不要なので、kk_aperyへ直接読み込む
+  // 　→ 手番なしの場合は一旦tmp_kk1へ読み込む（KKP、KPPと同様）
   std::string filename_kk = g_AperyEvalFolder + "/KK_synthesized.bin";
   std::ifstream ifs_kk_apery(filename_kk, std::ios::binary);
   if (ifs_kk_apery.fail()) {
@@ -875,10 +894,16 @@ void AperyEval::LoadEval() {
     exit(EXIT_FAILURE);
   }
 
-  ifs_kk_apery.read(reinterpret_cast<char*>(kk_apery), sizeof(kk_apery));
+  // 評価関数ファイルの読込み用
+  int count_kk = SQ_NB * SQ_NB;
+  size_t size_kk = count_kk * (int)sizeof(ValueKk);
+  ValueKk* tmp_kk1 = new ValueKk[size_kk];
+
+  ifs_kk_apery.read(reinterpret_cast<char*>(tmp_kk1), size_kk);
   if (ifs_kk_apery.fail()) {
     std::printf("info string Failed to read %s.\n", filename_kk.c_str());
     ifs_kk_apery.close();
+    delete[] tmp_kk1;
     exit(EXIT_FAILURE);
   }
   ifs_kk_apery.close();
@@ -890,6 +915,7 @@ void AperyEval::LoadEval() {
   std::ifstream ifs_kkp_apery(filename_kkp, std::ios::binary);
   if (ifs_kkp_apery.fail()) {
     std::printf("info string Failed to open %s.\n", filename_kkp.c_str());
+    delete[] tmp_kk1;
     exit(EXIT_FAILURE);
   }
 
@@ -901,8 +927,9 @@ void AperyEval::LoadEval() {
   ifs_kkp_apery.read(reinterpret_cast<char*>(tmp_kkp1), size_kkp);
   if (ifs_kkp_apery.fail()) {
     std::printf("info string Failed to read %s.\n", filename_kkp.c_str());
-    delete[] tmp_kkp1;
     ifs_kkp_apery.close();
+    delete[] tmp_kk1;
+    delete[] tmp_kkp1;
     exit(EXIT_FAILURE);
   }
   ifs_kkp_apery.close();
@@ -914,6 +941,8 @@ void AperyEval::LoadEval() {
   std::ifstream ifs_kpp_apery(filename_kpp, std::ios::binary);
   if (ifs_kpp_apery.fail()) {
     std::printf("info string Failed to open %s.\n", filename_kpp.c_str());
+    delete[] tmp_kk1;
+    delete[] tmp_kkp1;
     exit(EXIT_FAILURE);
   }
 
@@ -925,9 +954,10 @@ void AperyEval::LoadEval() {
   ifs_kpp_apery.read(reinterpret_cast<char*>(tmp_kpp1), size_kpp);
   if (ifs_kpp_apery.fail()) {
     std::printf("info string Failed to read %s.\n", filename_kpp.c_str());
+    ifs_kpp_apery.close();
+    delete[] tmp_kk1;
     delete[] tmp_kkp1;
     delete[] tmp_kpp1;
-    ifs_kpp_apery.close();
     exit(EXIT_FAILURE);
   }
   ifs_kpp_apery.close();
@@ -936,15 +966,28 @@ void AperyEval::LoadEval() {
   //----- Aperyの評価関数パラメータ（技巧のPsqIndexへの変換後）へ格納
   // ・「tmp_kkp1、tmp_kpp1」から「kkp_apery、kpp_apery」へ
   // ・KKはPsqIndexの変換が不要なので、kk_aperyへ直接読み込み済み
+  // 　→ 手番なしの場合は一旦tmp_kk1へ読み込む（KKP、KPPと同様）
+  // 　→ 「tmp_kk1」から「kk_apery」へ
 
+  #define TMP_KK1(k1, k2)     tmp_kk1[k1 * SQ_NB + k2]
   #define TMP_KKP1(k1, k2, p) tmp_kkp1[k1 * SQ_NB * fe_end + k2 * fe_end + p]
   #define TMP_KPP1(k, p1, p2) tmp_kpp1[k * fe_end * fe_end + p1 * fe_end + p2]
+
+  // KK
+  for (int k1 = 0; k1 < 81; ++k1) {
+    for (int k2 = 0; k2 < 81; ++k2) {
+      ValueKk val = TMP_KK1(k1, k2);
+      kk_apery[k1][k2] = val[0];
+    }
+  }
 
   // KKP
   for (int k1 = 0; k1 < 81; ++k1) {
     for (int k2 = 0; k2 < 81; ++k2) {
       for (int p = 0; p < 2110; ++p) {
-        kkp_apery[k1][k2][p] = TMP_KKP1(k1, k2, GetAperyPsqIndex((PsqIndex)p));
+        //kkp_apery[k1][k2][p] = TMP_KKP1(k1, k2, GetAperyPsqIndex((PsqIndex)p));
+        ValueKkp val = TMP_KKP1(k1, k2, GetAperyPsqIndex((PsqIndex)p));
+        kkp_apery[k1][k2][p] = val[0];
       }
     }
   }
@@ -953,7 +996,9 @@ void AperyEval::LoadEval() {
   for (int k = 0; k < 81; ++k) {
     for (int p1 = 0; p1 < 2110; ++p1) {
       for (int p2 = 0; p2 < 2110; ++p2) {
-        kpp_apery[k][p1][p2] = TMP_KPP1(k, GetAperyPsqIndex((PsqIndex)p1), GetAperyPsqIndex((PsqIndex)p2));
+        //kpp_apery[k][p1][p2] = TMP_KPP1(k, GetAperyPsqIndex((PsqIndex)p1), GetAperyPsqIndex((PsqIndex)p2));
+        ValueKpp val = TMP_KPP1(k, GetAperyPsqIndex((PsqIndex)p1), GetAperyPsqIndex((PsqIndex)p2));
+        kpp_apery[k][p1][p2] = val[0];
       }
     }
   }
@@ -961,10 +1006,12 @@ void AperyEval::LoadEval() {
   //-----
 
   // メモリ解放
+  delete[] tmp_kk1;
   delete[] tmp_kkp1;
   delete[] tmp_kpp1;
 
   // undef
+  #undef TMP_KK1
   #undef TMP_KKP1
   #undef TMP_KPP1
 }
@@ -981,20 +1028,24 @@ AperyEvalDetail AperyEval::ComputeEval(const Position& pos, const PsqList& list)
   const Square inv_sq_wk = Square::rotate180(sq_wk);
 
   // KK
-  apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk][AperyEval::kBoard];
-  apery_eval_detail.kk_turn  = kk_apery[sq_bk][sq_wk][AperyEval::kTurn];
+  //apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk][AperyEval::kBoard];
+  //apery_eval_detail.kk_turn  = kk_apery[sq_bk][sq_wk][AperyEval::kTurn];
+  apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk];
 
   for (const PsqPair* i = list.begin(); i != list.end(); ++i) {
     // KKP
-    apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kBoard];
-    apery_eval_detail.kkp_turn  += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kTurn];
+    //apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kBoard];
+    //apery_eval_detail.kkp_turn  += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kTurn];
+    apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i->black()];
 
     for (const PsqPair* j = list.begin(); j < i; ++j) {
       // KPP
-      apery_eval_detail.kpp_board[kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kTurn];
-      apery_eval_detail.kpp_board[kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kBoard];
-      apery_eval_detail.kpp_turn [kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kTurn];
+      //apery_eval_detail.kpp_board[kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kBoard];
+      //apery_eval_detail.kpp_turn [kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kTurn];
+      //apery_eval_detail.kpp_board[kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kBoard];
+      //apery_eval_detail.kpp_turn [kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kTurn];
+      apery_eval_detail.kpp_board[kBlack] += kpp_apery[sq_bk][i->black()][j->black()];
+      apery_eval_detail.kpp_board[kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()];
     }
   }
 
@@ -1051,10 +1102,11 @@ int32_t AperyEvalDetail::Sum(const Color side_to_move) const {
   // 駒の位置（kpp_board[kWhite]のみマイナス）
   int32_t score_board = kk_board + kkp_board + kpp_board[kBlack] - kpp_board[kWhite];
   // 手番（すべてプラス）
-  int32_t score_turn  = kk_turn  + kkp_turn  + kpp_turn [kBlack] + kpp_turn [kWhite];
+  //int32_t score_turn  = kk_turn  + kkp_turn  + kpp_turn [kBlack] + kpp_turn [kWhite];
 
   // 合計
-  int32_t score_sum = (side_to_move == kBlack ? (material + score_board) : -(material + score_board)) + score_turn;
+  //int32_t score_sum = (side_to_move == kBlack ? (material + score_board) : -(material + score_board)) + score_turn;
+  int32_t score_sum = (side_to_move == kBlack ? (material + score_board) : -(material + score_board));
 
   return score_sum;
 }
@@ -1245,9 +1297,12 @@ void AperyEvalDetail::Print(const Color side_to_move) const {
   std::printf("Sum         =%+9.2f\n", AperyEval::ToCentiPawn(Sum(side_to_move)));
   std::printf("-----\n");
   std::printf("Material    =%+9.2f\n", AperyEval::ToCentiPawn(material, side_to_move));
-  std::printf("KK          =%+9.2f\n", AperyEval::ToCentiPawn(kk_board, side_to_move) + AperyEval::ToCentiPawn(kk_turn));
-  std::printf("KKP         =%+9.2f\n", AperyEval::ToCentiPawn(kkp_board, side_to_move) + AperyEval::ToCentiPawn(kkp_turn));
-  std::printf("KPP         =%+9.2f\n", AperyEval::ToCentiPawn(kpp_board[kBlack] - kpp_board[kWhite], side_to_move) + AperyEval::ToCentiPawn(kpp_turn[kBlack] + kpp_turn[kWhite]));
+  //std::printf("KK          =%+9.2f\n", AperyEval::ToCentiPawn(kk_board, side_to_move) + AperyEval::ToCentiPawn(kk_turn));
+  //std::printf("KKP         =%+9.2f\n", AperyEval::ToCentiPawn(kkp_board, side_to_move) + AperyEval::ToCentiPawn(kkp_turn));
+  //std::printf("KPP         =%+9.2f\n", AperyEval::ToCentiPawn(kpp_board[kBlack] - kpp_board[kWhite], side_to_move) + AperyEval::ToCentiPawn(kpp_turn[kBlack] + kpp_turn[kWhite]));
+  std::printf("KK          =%+9.2f\n", AperyEval::ToCentiPawn(kk_board, side_to_move));
+  std::printf("KKP         =%+9.2f\n", AperyEval::ToCentiPawn(kkp_board, side_to_move));
+  std::printf("KPP         =%+9.2f\n", AperyEval::ToCentiPawn(kpp_board[kBlack] - kpp_board[kWhite], side_to_move));
   std::printf("----------\n");
 }
 
