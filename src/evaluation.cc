@@ -56,8 +56,11 @@ int32_t kkp_apery[81][81][2110];
 int16_t kpp_apery[81][2110][2110];
 
 
+// constを削除
+//Score EvalDetail::ComputeFinalScore(Color side_to_move,
+//                                    double* const progress_output) const {
 Score EvalDetail::ComputeFinalScore(Color side_to_move,
-                                    double* const progress_output) const {
+                                    double* const progress_output) {
 
   PackedScore kp_total = kp[kBlack] + kp[kWhite];
   PackedScore others = controls + two_pieces + king_safety + sliders;
@@ -146,6 +149,8 @@ Score EvalDetail::ComputeFinalScore(Color side_to_move,
   // 最終的な評価値
   int score_mix = score_gikou * rate_gikou + score_apery * rate_apery;
   score_mix = std::max(std::min(score_mix, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
+
+  // 各々のソフトの最終的な評価値を保存
 
   return static_cast<Score>(score_mix);
 }
@@ -1198,7 +1203,9 @@ double ComputeEvalOthers(PackedScore others, int64_t progress, Color side_to_mov
 }
 
 // 評価値の詳細情報を標準出力へ出力する
-void EvalDetail::Print(Color side_to_move) const {
+// constを削除
+//void EvalDetail::Print(Color side_to_move) const {
+void EvalDetail::Print(Color side_to_move)  {
   // 最終的な評価値
   Score final_score = ComputeFinalScore(side_to_move);
 

@@ -103,3 +103,10 @@
 　・技巧の評価値はオリジナルのまま。手番の評価を含む。
 
 
+■Gikou_AperyEvalMixNoTurn_BothGains_20160918
+「Gikou_AperyEvalMixNoTurn_20160913」からの変更点
+　・試験的に、技巧とAperyの各々の評価値のGainsStatsを追加し、枝刈り（Move count based pruning）で使用する。
+　・両方のGainsStatsが負の場合にのみ、枝刈りするように変更。（枝刈りの条件を少し厳しくした）
+　・元々のGainsStatsは指し手の実現確率の算出で使用されているので、そのままにしておく。
+
+

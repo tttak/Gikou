@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou AperyEvalMixNoTurn 20160913";
+const auto kProgramName = "Gikou AperyEvalMixNoTurn_BothGains 20160918";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 

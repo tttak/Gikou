@@ -60,6 +60,10 @@ class Search {
     Depth reduction;
     Score static_score;
     bool skip_null_move;
+
+    // 各々のソフトの最終的な評価値
+    Score static_score_gikou;
+    Score static_score_apery;
   };
 
   static void Init();
@@ -183,6 +187,11 @@ class Search {
   MovesStats countermoves_;
   MovesStats followupmoves_;
   GainsStats gains_;
+
+  // 各々のソフトの評価値のGainsStats
+  GainsStats gains_gikou_;
+  GainsStats gains_apery_;
+
   std::vector<RootMove> root_moves_;
 
   const size_t thread_id_;
