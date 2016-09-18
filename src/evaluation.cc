@@ -151,6 +151,8 @@ Score EvalDetail::ComputeFinalScore(Color side_to_move,
   score_mix = std::max(std::min(score_mix, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
 
   // 各々のソフトの最終的な評価値を保存
+  this->final_score_gikou = (Score)score_gikou;
+  this->final_score_apery = (Score)score_apery;
 
   return static_cast<Score>(score_mix);
 }
