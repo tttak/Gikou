@@ -46,7 +46,7 @@
 なお、評価値として「手番側から見た評価値」を出力しています。
 
   【実行例】
-  setoption name Z04_AperyEvalFolder value ./Apery_20160307
+  setoption name Z01_AperyEvalFolder value ./Apery_20160307
   isready
   position sfen l6nl/5+P1gk/2np1S3/p1p4Pp/3P2Sp1/1PPb2P1P/P5GS1/R8/LN4bKL w RGgsn5p 1
   eval
