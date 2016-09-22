@@ -30,13 +30,14 @@
 
 std::unique_ptr<EvalParameters> g_eval_params(new EvalParameters);
 
-// Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-extern int g_AperyEvalOpening;
-extern int g_AperyEvalMiddleGame;
-extern int g_AperyEvalEndGame;
-
 // Aperyの評価関数バイナリのフォルダ
 extern std::string g_AperyEvalFolder;
+
+// 評価関数切替（Apery→技巧）の進行度（単位は%）
+extern int g_ChangeEvalProgress;
+
+// 使用する評価関数の種類
+extern EvalKind g_EvalKind;
 
 // Aperyの評価関数テーブルの要素数など
 const int SQ_NB = 81;
@@ -55,6 +56,20 @@ ValueKpp kpp_apery[81][2110][2110];
 
 Score EvalDetail::ComputeFinalScore(Color side_to_move,
                                     double* const progress_output) const {
+
+  // ----- 使用する評価関数の種類が「Apery」の場合
+  if (g_EvalKind == kApery) {
+
+    // Aperyの評価値
+    int score_apery = (int)AperyEval::ToCentiPawn(apery_eval_detail.Sum(side_to_move));
+    score_apery = std::max(std::min(score_apery, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
+
+    // 戻り値
+    return static_cast<Score>(score_apery);
+  }
+
+
+  // ----- 以下、使用する評価関数の種類が「技巧」の場合
 
   PackedScore kp_total = kp[kBlack] + kp[kWhite];
   PackedScore others = controls + two_pieces + king_safety + sliders;
@@ -104,47 +119,11 @@ Score EvalDetail::ComputeFinalScore(Color side_to_move,
   }
 
   // 4. 小数点以下を切り捨てる
-  //int64_t score = sum / (kScale * static_cast<int64_t>(kFvScale));
-  //assert(-kScoreMaxEval <= score && score <= kScoreMaxEval);
+  int64_t score = sum / (kScale * static_cast<int64_t>(kFvScale));
+  assert(-kScoreMaxEval <= score && score <= kScoreMaxEval);
 
   // 5. 後手番の場合は、得点を反転させる（常に手番側から見た点数になるようにする）
-  //return static_cast<Score>(side_to_move == kBlack ? score : -score);
-
-
-  // 技巧の評価値（double）
-  double score_gikou = (double)sum / (kScale * static_cast<int64_t>(kFvScale));
-  score_gikou = (side_to_move == kBlack ? score_gikou : -score_gikou);
-
-  // Aperyの評価値（double）
-  double score_apery = AperyEval::ToCentiPawn(apery_eval_detail.Sum(side_to_move));
-
-  // 序盤・中盤・終盤の評価値の割合
-  double rate_opening_apery = (double)g_AperyEvalOpening / 100;
-  double rate_opening_gikou = 1 - rate_opening_apery;
-
-  double rate_middle_game_apery = (double)g_AperyEvalMiddleGame / 100;
-  double rate_middle_game_gikou = 1 - rate_middle_game_apery;
-
-  double rate_end_game_apery = (double)g_AperyEvalEndGame / 100;
-  double rate_end_game_gikou = 1 - rate_end_game_apery;
-
-  // 現在の進行度での技巧、Aperyの評価値の割合
-  double rate_gikou = 0;
-  double rate_apery = 0;
-
-  if (progress_double < 0.5) {
-    rate_gikou = (1 - progress_double * 2) * rate_opening_gikou + (progress_double * 2) * rate_middle_game_gikou;
-    rate_apery = (1 - progress_double * 2) * rate_opening_apery + (progress_double * 2) * rate_middle_game_apery;
-  } else {
-    rate_gikou = (2 - progress_double * 2) * rate_middle_game_gikou + (progress_double * 2 - 1) * rate_end_game_gikou;
-    rate_apery = (2 - progress_double * 2) * rate_middle_game_apery + (progress_double * 2 - 1) * rate_end_game_apery;
-  }
-
-  // 最終的な評価値
-  int score_mix = score_gikou * rate_gikou + score_apery * rate_apery;
-  score_mix = std::max(std::min(score_mix, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
-
-  return static_cast<Score>(score_mix);
+  return static_cast<Score>(side_to_move == kBlack ? score : -score);
 }
 
 namespace {
@@ -192,6 +171,21 @@ inline EvalDetail SumPositionalScore(const PsqPair psq, const PsqList& list,
     two_pieces += g_eval_params->two_pieces[psq.black()][i.black()];
   }
 
+  EvalDetail sum;
+  sum.kp[kBlack] = kp_black;
+  sum.kp[kWhite] = FlipScores3x1(kp_white);
+  sum.two_pieces = two_pieces;
+
+  return sum;
+}
+
+/**
+ * 特定の１駒について、位置評価の合計値を計算します（Apery）.
+ */
+inline EvalDetail SumPositionalScore_Apery(const PsqPair psq, const PsqList& list,
+                                     const Position& pos) {
+  Square bk = pos.king_square(kBlack);
+  Square wk = Square::rotate180(pos.king_square(kWhite));
 
   // 3. AperyのKKPとKPP
   // ・KKは計算不要。この「特定の１駒」は玉ではないので。
@@ -213,12 +207,7 @@ inline EvalDetail SumPositionalScore(const PsqPair psq, const PsqList& list,
     }
   }
 
-  // -----
-
   EvalDetail sum;
-  sum.kp[kBlack] = kp_black;
-  sum.kp[kWhite] = FlipScores3x1(kp_white);
-  sum.two_pieces = two_pieces;
   sum.apery_eval_detail = apery_eval_detail;
 
   return sum;
@@ -247,11 +236,25 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   // 3. PP計算で重複して加算されてしまった部分を補正する
   two_pieces -= g_eval_params->two_pieces[psq1.black()][psq2.black()];
 
+  EvalDetail sum;
+  sum.kp[kBlack] = kp_black;
+  sum.kp[kWhite] = FlipScores3x1(kp_white);
+  sum.two_pieces = two_pieces;
 
+  return sum;
+}
+
+/**
+ * 特定の２駒について、位置評価の合計値を計算します（Apery）.
+ */
+inline EvalDetail SumPositionalScore_Apery(const PsqPair psq1, const PsqPair psq2,
+                                     const PsqList& list, const Position& pos) {
   // 4. AperyのKKPとKPP
   // ・KKは計算不要。この「特定の２駒」は玉ではないので。
   AperyEvalDetail apery_eval_detail;
 
+  Square bk = pos.king_square(kBlack);
+  Square wk = Square::rotate180(pos.king_square(kWhite));
   const Square sq_wk = pos.king_square(kWhite);
 
   // KKP
@@ -292,9 +295,6 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
   // -----
 
   EvalDetail sum;
-  sum.kp[kBlack] = kp_black;
-  sum.kp[kWhite] = FlipScores3x1(kp_white);
-  sum.two_pieces = two_pieces;
   sum.apery_eval_detail = apery_eval_detail;
 
   return sum;
@@ -583,15 +583,93 @@ EvalDetail EvaluateDifferenceForKingMove(const Position& pos,
     Piece captured = move.captured_piece();
     // a. KP・PPスコアから古い特徴を除外する
     PsqPair old_psq = PsqPair::OfBoard(captured, to);
-    diff -= SumPositionalScore(old_psq, *list, pos);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      diff -= SumPositionalScore(old_psq, *list, pos);
+    }
+    // ----- 使用する評価関数の種類が「Apery」の場合
+    else if (g_EvalKind == kApery) {
+      diff -= SumPositionalScore_Apery(old_psq, *list, pos);
+    }
+
     // b. インデックスリストを更新する
     list->MakeMove(move);
     // c. KP・PPスコアに新しい特徴を追加する
     PieceType hand_type = captured.hand_type();
     int num = pos.hand(king_color).count(hand_type);
     PsqPair new_psq = PsqPair::OfHand(king_color, hand_type, num);
-    diff += SumPositionalScore(new_psq, *list, pos);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      diff += SumPositionalScore(new_psq, *list, pos);
+    }
+    // ----- 使用する評価関数の種類が「Apery」の場合
+    else if (g_EvalKind == kApery) {
+      diff += SumPositionalScore_Apery(new_psq, *list, pos);
+    }
+
   }
+
+
+  // ----- 使用する評価関数の種類が「Apery」の場合
+  if (g_EvalKind == kApery) {
+
+    // 3. 移動した玉に関するAperyのKK、KKP、KPPのスコアを再計算する
+    AperyEvalDetail apery_eval_detail;
+
+    const Square sq_bk = pos.king_square(kBlack);
+    const Square sq_wk = pos.king_square(kWhite);
+    const Square inv_sq_wk = Square::rotate180(sq_wk);
+
+    // KK
+    apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk][AperyEval::kBoard];
+    apery_eval_detail.kk_turn  = kk_apery[sq_bk][sq_wk][AperyEval::kTurn];
+
+    diff.apery_eval_detail.kk_board = apery_eval_detail.kk_board - previous_eval.apery_eval_detail.kk_board;
+    diff.apery_eval_detail.kk_turn  = apery_eval_detail.kk_turn  - previous_eval.apery_eval_detail.kk_turn;
+
+
+    // KKP
+    for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
+      apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kBoard];
+      apery_eval_detail.kkp_turn  += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kTurn];
+    }
+
+    diff.apery_eval_detail.kkp_board = apery_eval_detail.kkp_board - previous_eval.apery_eval_detail.kkp_board;
+    diff.apery_eval_detail.kkp_turn  = apery_eval_detail.kkp_turn  - previous_eval.apery_eval_detail.kkp_turn;
+
+
+    // KPP
+    if (king_color == kBlack) {
+      for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
+        for (const PsqPair* j = list->begin(); j < i; ++j) {
+          apery_eval_detail.kpp_board[kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kBoard];
+          apery_eval_detail.kpp_turn [kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kTurn];
+        }
+      }
+
+      diff.apery_eval_detail.kpp_board[kBlack] = apery_eval_detail.kpp_board[kBlack] - previous_eval.apery_eval_detail.kpp_board[kBlack];
+      diff.apery_eval_detail.kpp_turn [kBlack] = apery_eval_detail.kpp_turn [kBlack] - previous_eval.apery_eval_detail.kpp_turn [kBlack];
+
+    } else {
+      for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
+        for (const PsqPair* j = list->begin(); j < i; ++j) {
+          apery_eval_detail.kpp_board[kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kBoard];
+          apery_eval_detail.kpp_turn [kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kTurn];
+        }
+      }
+
+      diff.apery_eval_detail.kpp_board[kWhite] = apery_eval_detail.kpp_board[kWhite] - previous_eval.apery_eval_detail.kpp_board[kWhite];
+      diff.apery_eval_detail.kpp_turn [kWhite] = apery_eval_detail.kpp_turn [kWhite] - previous_eval.apery_eval_detail.kpp_turn [kWhite];
+    }
+
+    // 戻り値
+    return diff;
+  }
+
+
+  // ----- 以下、使用する評価関数の種類が「技巧」の場合
 
   // 2. 移動した玉に関するKPスコアを再計算する
   PackedScore sum_of_kp(0);
@@ -607,56 +685,6 @@ EvalDetail EvaluateDifferenceForKingMove(const Position& pos,
       sum_of_kp += g_eval_params->king_piece[king_square][i.white()];
     }
     diff.kp[kWhite] = FlipScores3x1(sum_of_kp) - previous_eval.kp[kWhite];
-  }
-
-
-  // 3. 移動した玉に関するAperyのKK、KKP、KPPのスコアを再計算する
-  AperyEvalDetail apery_eval_detail;
-
-  const Square sq_bk = pos.king_square(kBlack);
-  const Square sq_wk = pos.king_square(kWhite);
-  const Square inv_sq_wk = Square::rotate180(sq_wk);
-
-  // KK
-  apery_eval_detail.kk_board = kk_apery[sq_bk][sq_wk][AperyEval::kBoard];
-  apery_eval_detail.kk_turn  = kk_apery[sq_bk][sq_wk][AperyEval::kTurn];
-
-  diff.apery_eval_detail.kk_board = apery_eval_detail.kk_board - previous_eval.apery_eval_detail.kk_board;
-  diff.apery_eval_detail.kk_turn  = apery_eval_detail.kk_turn  - previous_eval.apery_eval_detail.kk_turn;
-
-
-  // KKP
-  for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
-    apery_eval_detail.kkp_board += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kBoard];
-    apery_eval_detail.kkp_turn  += kkp_apery[sq_bk][sq_wk][i->black()][AperyEval::kTurn];
-  }
-
-  diff.apery_eval_detail.kkp_board = apery_eval_detail.kkp_board - previous_eval.apery_eval_detail.kkp_board;
-  diff.apery_eval_detail.kkp_turn  = apery_eval_detail.kkp_turn  - previous_eval.apery_eval_detail.kkp_turn;
-
-
-  // KPP
-  if (king_color == kBlack) {
-    for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
-      for (const PsqPair* j = list->begin(); j < i; ++j) {
-        apery_eval_detail.kpp_board[kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kBoard];
-        apery_eval_detail.kpp_turn [kBlack] += kpp_apery[sq_bk][i->black()][j->black()][AperyEval::kTurn];
-      }
-    }
-
-    diff.apery_eval_detail.kpp_board[kBlack] = apery_eval_detail.kpp_board[kBlack] - previous_eval.apery_eval_detail.kpp_board[kBlack];
-    diff.apery_eval_detail.kpp_turn [kBlack] = apery_eval_detail.kpp_turn [kBlack] - previous_eval.apery_eval_detail.kpp_turn [kBlack];
-
-  } else {
-    for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
-      for (const PsqPair* j = list->begin(); j < i; ++j) {
-        apery_eval_detail.kpp_board[kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kBoard];
-        apery_eval_detail.kpp_turn [kWhite] += kpp_apery[inv_sq_wk][i->white()][j->white()][AperyEval::kTurn];
-      }
-    }
-
-    diff.apery_eval_detail.kpp_board[kWhite] = apery_eval_detail.kpp_board[kWhite] - previous_eval.apery_eval_detail.kpp_board[kWhite];
-    diff.apery_eval_detail.kpp_turn [kWhite] = apery_eval_detail.kpp_turn [kWhite] - previous_eval.apery_eval_detail.kpp_turn [kWhite];
   }
 
   return diff;
@@ -682,19 +710,46 @@ EvalDetail EvaluateDifferenceForNonKingMove(const Position& pos,
     // 1. 古い特徴を除外する
     int num = pos.hand(side_to_move).count(pt) + 1;
     PsqPair old_psq = PsqPair::OfHand(side_to_move, pt, num);
-    diff -= SumPositionalScore(old_psq, *list, pos);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      diff -= SumPositionalScore(old_psq, *list, pos);
+    }
+    // ----- 使用する評価関数の種類が「Apery」の場合
+    else if (g_EvalKind == kApery) {
+      diff -= SumPositionalScore_Apery(old_psq, *list, pos);
+    }
+
     // 2. インデックスリストを更新する
     list->MakeMove(move);
     // 3. 新しい特徴を追加する
     PsqPair new_psq = PsqPair::OfBoard(piece, to);
-    diff += SumPositionalScore(new_psq, *list, pos);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      diff += SumPositionalScore(new_psq, *list, pos);
+    }
+    // ----- 使用する評価関数の種類が「Apery」の場合
+    else if (g_EvalKind == kApery) {
+      diff += SumPositionalScore_Apery(new_psq, *list, pos);
+    }
+
   } else if (move.is_capture()) {
     Piece captured = move.captured_piece();
     Square from = move.from();
     // 1. 古い特徴を除外する
     PsqPair old_psq1 = PsqPair::OfBoard(piece, from);
     PsqPair old_psq2 = PsqPair::OfBoard(captured, to);
-    diff -= SumPositionalScore(old_psq1, old_psq2, *list, pos);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      diff -= SumPositionalScore(old_psq1, old_psq2, *list, pos);
+    }
+    // ----- 使用する評価関数の種類が「Apery」の場合
+    else if (g_EvalKind == kApery) {
+      diff -= SumPositionalScore_Apery(old_psq1, old_psq2, *list, pos);
+    }
+
     // 2. インデックスリストを更新する
     list->MakeMove(move);
     // 3. 新しい特徴を追加する
@@ -702,17 +757,44 @@ EvalDetail EvaluateDifferenceForNonKingMove(const Position& pos,
     int num = pos.hand(side_to_move).count(hand_type);
     PsqPair new_psq1 = PsqPair::OfBoard(move.piece_after_move(), to);
     PsqPair new_psq2 = PsqPair::OfHand(side_to_move, hand_type, num);
-    diff += SumPositionalScore(new_psq1, new_psq2, *list, pos);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      diff += SumPositionalScore(new_psq1, new_psq2, *list, pos);
+    }
+    // ----- 使用する評価関数の種類が「Apery」の場合
+    else if (g_EvalKind == kApery) {
+      diff += SumPositionalScore_Apery(new_psq1, new_psq2, *list, pos);
+    }
+
   } else {
     Square from = move.from();
     // 1. 古い特徴を除外する
     PsqPair old_psq = PsqPair::OfBoard(piece, from);
-    diff -= SumPositionalScore(old_psq, *list, pos);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      diff -= SumPositionalScore(old_psq, *list, pos);
+    }
+    // ----- 使用する評価関数の種類が「Apery」の場合
+    else if (g_EvalKind == kApery) {
+      diff -= SumPositionalScore_Apery(old_psq, *list, pos);
+    }
+
     // 2. インデックスリストを更新する
     list->MakeMove(move);
     // 3. 新しい特徴を増加する
     PsqPair new_psq = PsqPair::OfBoard(move.piece_after_move(), to);
-    diff += SumPositionalScore(new_psq, *list, pos);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      diff += SumPositionalScore(new_psq, *list, pos);
+    }
+    // ----- 使用する評価関数の種類が「Apery」の場合
+    else if (g_EvalKind == kApery) {
+      diff += SumPositionalScore_Apery(new_psq, *list, pos);
+    }
+
   }
 
   return diff;
@@ -737,6 +819,19 @@ EvalDetail Evaluation::EvaluateAll(const Position& pos,
     return sum;
   }
 
+
+  // ----- 使用する評価関数の種類が「Apery」の場合
+  if (g_EvalKind == kApery) {
+    // 5. Aperyの評価値（全計算）
+    sum.apery_eval_detail = AperyEval::ComputeEval(pos, psq_list);
+
+    // 戻り値
+    return sum;
+  }
+
+
+  // ----- 以下、使用する評価関数の種類が「技巧」の場合
+
   // 1. 駒の位置評価
   sum += EvaluatePositionalAdvantage(pos, psq_list);
 
@@ -749,9 +844,6 @@ EvalDetail Evaluation::EvaluateAll(const Position& pos,
 
   // 4. 飛車・角・香車の利き
   sum.sliders = EvaluateSlidingPieces(pos);
-
-  // 5. Aperyの評価値（全計算）
-  sum.apery_eval_detail = AperyEval::ComputeEval(pos, psq_list);
 
   return sum;
 }
@@ -780,29 +872,51 @@ EvalDetail Evaluation::EvaluateDifference(const Position& pos,
   }
 #endif
 
+  // 以下、使用する評価関数の種類が「技巧」の場合と「Apery」の場合で処理自体を分けた方がすっきりするが、
+  // PsqListの更新が評価値の差分計算と同時に行われているため、
+  // とりあえずは処理の中で場合分けする方式にする。（あとで変更するかも）
+
+
   // 1. 駒の位置評価と、各マスの利き評価（差分計算）
   if (pos.last_move().piece().is(kKing)) {
     // a. 駒の位置評価
     diff = EvaluateDifferenceForKingMove(pos, previous_eval, psq_list);
-    // b. 各マスの利き評価（ここについては、再計算）
-    diff.controls = EvaluateControls(pos, current_list) - previous_eval.controls;
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      // b. 各マスの利き評価（ここについては、再計算）
+      diff.controls = EvaluateControls(pos, current_list) - previous_eval.controls;
+    }
+
   } else {
     // a. 駒の位置評価
     diff = EvaluateDifferenceForNonKingMove(pos, psq_list);
-    // b. 各マスの利き評価
-    diff.controls = EvaluateDifferenceOfControls(pos, previous_list, current_list);
+
+    // ----- 使用する評価関数の種類が「技巧」の場合
+    if (g_EvalKind == kGikou) {
+      // b. 各マスの利き評価
+      diff.controls = EvaluateDifferenceOfControls(pos, previous_list, current_list);
+    }
   }
   // 差分計算の途中で、PsqListの差分計算が正しく行われたかをチェック
   assert(PsqList::TwoListsHaveSameItems(*psq_list, PsqList(pos)));
 
-  // 2. 玉の安全度（末端評価）
-  diff.king_safety = EvaluateKingSafety(pos) - previous_eval.king_safety;
 
-  // 3. 飛車・角・香車の利き（末端評価）
-  diff.sliders = EvaluateSlidingPieces(pos) - previous_eval.sliders;
+  // ----- 使用する評価関数の種類が「技巧」の場合
+  if (g_EvalKind == kGikou) {
+    // 2. 玉の安全度（末端評価）
+    diff.king_safety = EvaluateKingSafety(pos) - previous_eval.king_safety;
 
-  // 4. Aperyの駒割りの差分計算
-  diff.apery_eval_detail.material = AperyEval::EvaluateDifferenceOfMaterial(pos) * AperyEval::FV_SCALE;
+    // 3. 飛車・角・香車の利き（末端評価）
+    diff.sliders = EvaluateSlidingPieces(pos) - previous_eval.sliders;
+  }
+
+
+  // ----- 使用する評価関数の種類が「Apery」の場合
+  if (g_EvalKind == kApery) {
+    // 4. Aperyの駒割りの差分計算
+    diff.apery_eval_detail.material = AperyEval::EvaluateDifferenceOfMaterial(pos) * AperyEval::FV_SCALE;
+  }
 
   return diff;
 }
@@ -1069,12 +1183,6 @@ double AperyEval::ToCentiPawn(const int32_t value, const Color side_to_move) {
   return side_to_move == kBlack ? ToCentiPawn(value) : -ToCentiPawn(value);
 }
 
-// 評価値の詳細情報を標準出力へ出力する
-void Evaluation::Print(const Position& pos) {
-  PsqList psq_list(pos);
-  EvaluateAll(pos, psq_list).Print(pos.side_to_move());
-}
-
 /**
  * 技巧の生の評価値を１歩＝１００点（centipawn）の評価値（手番側から見た評価値）に変換します.
  * @param value 生の評価値
@@ -1146,14 +1254,27 @@ double ComputeEvalOthers(PackedScore others, int64_t progress, Color side_to_mov
 }
 
 // 評価値の詳細情報を標準出力へ出力する
-void EvalDetail::Print(Color side_to_move) const {
-  // 最終的な評価値
-  Score final_score = ComputeFinalScore(side_to_move);
+void Evaluation::Print(const Position& pos) {
 
-  // 以下、評価値の内訳も出力したいので、部分的にComputeFinalScoreと似た計算を行う
+  Color side_to_move = pos.side_to_move();
+
+  // ----- g_EvalKindを一時的に切り替えて「技巧」「Apery」の評価値を算出する。
+  // （あまりいい方法ではないが...）
+  PsqList psq_list(pos);
+
+  // 技巧
+  g_EvalKind = kGikou;
+  EvalDetail eval_detail_gikou = EvaluateAll(pos, psq_list);
+
+  // Apery
+  g_EvalKind = kApery;
+  EvalDetail eval_detail_apery = EvaluateAll(pos, psq_list);
+
+
+  // ----- 技巧について、評価値の内訳も出力したいので、部分的にComputeFinalScoreと似た計算を行う
 
   // KPの合計
-  PackedScore kp_total = kp[kBlack] + kp[kWhite];
+  PackedScore kp_total = eval_detail_gikou.kp[kBlack] + eval_detail_gikou.kp[kWhite];
 
   // 進行度を求める
   constexpr int64_t kScale = Progress::kWeightScale;
@@ -1162,67 +1283,60 @@ void EvalDetail::Print(Color side_to_move) const {
   int64_t progress = static_cast<int64_t>(progress_double * kScale);
 
   // 技巧の評価値を要素ごとに算出する
-  double score_kp_total    = ComputeEvalKp    (kp_total   , progress, side_to_move);
-  double score_controls    = ComputeEvalOthers(controls   , progress, side_to_move);
-  double score_two_pieces  = ComputeEvalOthers(two_pieces , progress, side_to_move);
-  double score_king_safety = ComputeEvalOthers(king_safety, progress, side_to_move);
-  double score_sliders     = ComputeEvalOthers(sliders    , progress, side_to_move);
+  double score_kp_total    = ComputeEvalKp    (kp_total                     , progress, side_to_move);
+  double score_controls    = ComputeEvalOthers(eval_detail_gikou.controls   , progress, side_to_move);
+  double score_two_pieces  = ComputeEvalOthers(eval_detail_gikou.two_pieces , progress, side_to_move);
+  double score_king_safety = ComputeEvalOthers(eval_detail_gikou.king_safety, progress, side_to_move);
+  double score_sliders     = ComputeEvalOthers(eval_detail_gikou.sliders    , progress, side_to_move);
 
   // 技巧の評価値（double）
   double score_gikou = score_kp_total + score_controls + score_two_pieces + score_king_safety + score_sliders;
 
-  // Aperyの評価値（double）
-  double score_apery = AperyEval::ToCentiPawn(apery_eval_detail.Sum(side_to_move));
 
-  // 序盤・中盤・終盤の評価値の割合
-  double rate_opening_apery = (double)g_AperyEvalOpening / 100;
-  double rate_opening_gikou = 1 - rate_opening_apery;
+  // ----- Aperyの評価値（double）
+  double score_apery = AperyEval::ToCentiPawn(eval_detail_apery.apery_eval_detail.Sum(side_to_move));
 
-  double rate_middle_game_apery = (double)g_AperyEvalMiddleGame / 100;
-  double rate_middle_game_gikou = 1 - rate_middle_game_apery;
 
-  double rate_end_game_apery = (double)g_AperyEvalEndGame / 100;
-  double rate_end_game_gikou = 1 - rate_end_game_apery;
-
-  // 現在の進行度での技巧、Aperyの評価値の割合
-  double rate_gikou = 0;
-  double rate_apery = 0;
-
-  if (progress_double < 0.5) {
-    rate_gikou = (1 - progress_double * 2) * rate_opening_gikou + (progress_double * 2) * rate_middle_game_gikou;
-    rate_apery = (1 - progress_double * 2) * rate_opening_apery + (progress_double * 2) * rate_middle_game_apery;
-  } else {
-    rate_gikou = (2 - progress_double * 2) * rate_middle_game_gikou + (progress_double * 2 - 1) * rate_end_game_gikou;
-    rate_apery = (2 - progress_double * 2) * rate_middle_game_apery + (progress_double * 2 - 1) * rate_end_game_apery;
-  }
+  // ----- 進行度を元に使用する評価関数を決定し、最終的な評価値を算出する。
 
   // 最終的な評価値
-  int score_mix = score_gikou * rate_gikou + score_apery * rate_apery;
-  score_mix = std::max(std::min(score_mix, (int)(kScoreMaxEval - 1)), (int)(- kScoreMaxEval + 1));
+  Score final_score;
 
+  // 序盤はApery
+  if (progress_double * 100 < g_ChangeEvalProgress) {
+    g_EvalKind = kApery;
+    final_score = eval_detail_apery.ComputeFinalScore(side_to_move);
+  }
+  // 中盤・終盤は技巧
+  else {
+    g_EvalKind = kGikou;
+    final_score = eval_detail_gikou.ComputeFinalScore(side_to_move);
+  }
 
 // デバッグ用
 #if 0
-  if (score_mix != final_score) {
-    printf("score_mix != final_score\n");
-    printf("score_mix  =%d\n", score_mix);
-    printf("final_score=%d\n", final_score);
+  double progress2 = Progress::EstimateProgress(pos);
+
+  if (progress2 == progress_double) {
+    printf("progress2 != progress_double\n");
+    printf("progress2      =%f\n", progress2);
+    printf("progress_double=%f\n", progress_double);
   }
 #endif
 
+  // -----
 
   // 最終的な評価値の情報を標準出力へ出力する
   std::printf("---------- Eval\n");
   std::printf("Eval        =%+6d\n", final_score);
   std::printf("-----\n");
   std::printf("Gikou       =%+9.2f\n", score_gikou);
-  std::printf("Apery       =%+9.2f\n", AperyEval::ToCentiPawn(apery_eval_detail.Sum(side_to_move)));
+  std::printf("Apery       =%+9.2f\n", score_apery);
   std::printf("-----\n");
   std::printf("SideToMove  = %s\n", side_to_move == kBlack ? "Black(Sente)" : "White(Gote)");
-  std::printf("Progress(%%) =%9.2f%%\n", progress_double * 100);
-  std::printf("Gikou(%%)    =%9.2f%%\n", rate_gikou * 100);
-  std::printf("Apery(%%)    =%9.2f%%\n", rate_apery * 100);
-
+  std::printf("Progress    =%9.2f%%\n", progress_double * 100);
+  std::printf("ChangeEval  =%9.2f%%\n", (double)g_ChangeEvalProgress);
+  std::printf("EvalKind    = %s\n", get_eval_kind_name(g_EvalKind).c_str());
 
   // 技巧の評価値の情報を標準出力へ出力する
   std::printf("---------- Gikou\n");
@@ -1236,7 +1350,7 @@ void EvalDetail::Print(Color side_to_move) const {
 
 
   // Aperyの評価値の情報を標準出力へ出力する
-  apery_eval_detail.Print(side_to_move);
+  eval_detail_apery.apery_eval_detail.Print(side_to_move);
 }
 
 // Aperyの評価値の情報を標準出力へ出力する

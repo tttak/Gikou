@@ -133,6 +133,7 @@ Score Node::Evaluate(double* const progress) {
     printf("(*this).last_move().is_capture()=%d\n", (*this).last_move().is_capture());
     printf("(*this).last_move().captured_piece()=%s\n", (*this).last_move().captured_piece().ToSfen().c_str());
     (*this).Print();
+    Evaluation::Print(*this);
 
     exit(EXIT_FAILURE);
   }
@@ -246,4 +247,16 @@ Key64 Node::ComputeKey(Move move) const {
   }
 
   return result;
+}
+
+
+// Evaluation::EvaluateAllを実行し、current->eval_detailを最新化します.
+// 評価関数の種類（技巧・Apery）が切り替わったときに使います。
+void Node::RefreshCurrentEvalDetail() {
+  auto current = stack_.end() - 1;
+
+  // 現局面の評価値を保存
+  current->psq_control_list = extended_board().GetPsqControlList();
+  current->eval_detail = Evaluation::EvaluateAll(*this, psq_list_);
+  current->eval_is_updated = true;
 }

@@ -161,6 +161,14 @@ class Node : public Position {
    */
   void UnmakeNullMove();
 
+
+  /**
+   * Evaluation::EvaluateAllを実行し、current->eval_detailを最新化します.
+   * 評価関数の種類（技巧・Apery）が切り替わったときに使います。
+   */
+  void RefreshCurrentEvalDetail();
+
+
  private:
 
   struct Stack {

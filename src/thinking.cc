@@ -28,13 +28,16 @@
 #include "usi.h"
 #include "usi_protocol.h"
 
-// Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-int g_AperyEvalOpening;
-int g_AperyEvalMiddleGame;
-int g_AperyEvalEndGame;
+#include "progress.h"
 
 // Aperyの評価関数バイナリのフォルダ
 std::string g_AperyEvalFolder;
+
+// 評価関数切替（Apery→技巧）の進行度（単位は%）
+int g_ChangeEvalProgress;
+
+// 使用する評価関数の種類
+EvalKind g_EvalKind;
 
 namespace {
 
@@ -52,13 +55,19 @@ void Thinking::Initialize() {
   book_.ReadFromFile(kBookFile);
   shared_data_.hash_table.SetSize(usi_options_["USI_Hash"]);
 
-  // Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-  g_AperyEvalOpening    = usi_options_["Z01_AperyEvalJoban"];
-  g_AperyEvalMiddleGame = usi_options_["Z02_AperyEvalChuban"];
-  g_AperyEvalEndGame    = usi_options_["Z03_AperyEvalShuban"];
-
   // Aperyの評価関数バイナリのフォルダ
-  g_AperyEvalFolder = usi_options_["Z04_AperyEvalFolder"].str_value();
+  g_AperyEvalFolder = usi_options_["Z01_AperyEvalFolder"].str_value();
+
+  // 評価関数切替（Apery→技巧）の進行度（単位は%）
+  g_ChangeEvalProgress = usi_options_["Z02_ChangeEvalProgress"];
+
+  // 使用する評価関数の種類の初期値
+  if (g_ChangeEvalProgress == 0) {
+    g_EvalKind = kGikou;
+  } else {
+    g_EvalKind = kApery;
+  }
+
 }
 
 void Thinking::StartNewGame() {
@@ -113,6 +122,53 @@ void Thinking::StartThinking(const Node& root_node,
     Node node = root_node;
     Score draw_score = Score(int(usi_options_["DrawScore"]));
     thread_manager_.SetNumSearchThreads(usi_options_["Threads"]);
+
+    // ----- 進行度を算出し、使用する評価関数を決める
+    double progress = Progress::EstimateProgress(node);
+
+    EvalKind old_EvalKind = g_EvalKind;
+
+    // 「-1」の場合、技巧とAperyで1手ごとに交代する（特殊なモード）
+    if (g_ChangeEvalProgress == -1) {
+      // どちらでもない場合、技巧にしておく（念のため）
+      if (g_EvalKind != kGikou && g_EvalKind != kApery) {
+        g_EvalKind = kGikou;
+      }
+      // 通常の場合
+      else {
+        // ponderの場合は何もしない
+        if (!go_options.ponder) {
+          // 1手ごとに交代する
+          if (g_EvalKind == kGikou) {
+            g_EvalKind = kApery;
+          } else {
+            g_EvalKind = kGikou;
+          }
+        }
+      }
+    }
+
+    // 通常の場合
+    else {
+      // 序盤はApery
+      if (progress * 100 < g_ChangeEvalProgress) {
+        g_EvalKind = kApery;
+      }
+      // 中盤・終盤は技巧
+      else {
+        g_EvalKind = kGikou;
+      }
+    }
+
+    // 評価関数の種類（技巧・Apery）が切り替わった場合、
+    // Evaluation::EvaluateAllを実行し、Nodeのcurrent->eval_detailを最新化する。
+    if (g_EvalKind != old_EvalKind) {
+      node.RefreshCurrentEvalDetail();
+    }
+
+    SYNCED_PRINTF("info string CurrentProgress=%.2f%%, ChangeEvalProgress=%d%%, EvalKind=%s\n", progress * 100, g_ChangeEvalProgress, get_eval_kind_name(g_EvalKind).c_str());
+
+    // -----
 
     // c. 探索を開始する
     const RootMove& best_root_move = thread_manager_.ParallelSearch(node,

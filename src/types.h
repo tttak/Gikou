@@ -192,4 +192,22 @@ inline Score score_mated_in(int ply) {
   return -kScoreMate + ply;
 }
 
+
+// 使用する評価関数の種類
+enum EvalKind {
+  kGikou = 0,
+  kApery = 1
+};
+
+inline std::string get_eval_kind_name(EvalKind eval_kind) {
+  if (eval_kind == kGikou) {
+    return "Gikou";
+  } else if (eval_kind == kApery) {
+    return "Apery";
+  } else {
+    return "";
+  }
+}
+
+
 #endif /* TYPES_H_ */

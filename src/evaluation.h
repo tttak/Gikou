@@ -191,7 +191,7 @@ struct EvalDetail {
    * 評価値の詳細情報を標準出力へ出力します.
    * @param side_to_move 手番
    */
-  void Print(Color side_to_move) const;
+  //void Print(Color side_to_move) const;
 
   /** KP（King-Piece）に関する評価値. */
   ArrayMap<PackedScore, Color> kp{PackedScore(0), PackedScore(0)};

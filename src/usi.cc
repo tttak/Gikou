@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou AperyEvalMix 20160912";
+const auto kProgramName = "Gikou JobanAperyEval 20160922";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -355,13 +355,12 @@ UsiOptions::UsiOptions() {
   // 勝ち数が少ない定跡を除外する場合はtrue
   map_.emplace("TinyBook", UsiOption(false));
 
-  // Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
-  map_.emplace("Z01_AperyEvalJoban" , UsiOption(50, 0, 100));
-  map_.emplace("Z02_AperyEvalChuban", UsiOption(50, 0, 100));
-  map_.emplace("Z03_AperyEvalShuban", UsiOption(50, 0, 100));
 
   // Aperyの評価関数バイナリのフォルダ
-  map_.emplace("Z04_AperyEvalFolder", UsiOption("./Apery_20160307", 0));
+  map_.emplace("Z01_AperyEvalFolder", UsiOption("./Apery_20160307", 0));
+
+  // 評価関数切替（Apery→技巧）の進行度（単位は%）
+  map_.emplace("Z02_ChangeEvalProgress", UsiOption(40, -1, 100));
 }
 
 void UsiOptions::PrintListOfOptions() {
