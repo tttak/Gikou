@@ -174,13 +174,17 @@ struct EvalDetail {
    * @param progress_output 進行度を出力するためのポインタ
    * @return 進行度と手番を考慮した、最終的な得点
    */
-  Score ComputeFinalScore(Color side_to_move, double* progress_output = nullptr) const;
+  // constを削除
+  //Score ComputeFinalScore(Color side_to_move, double* progress_output = nullptr) const;
+  Score ComputeFinalScore(Color side_to_move, double* progress_output = nullptr);
 
   /**
    * 評価値の詳細情報を標準出力へ出力します.
    * @param side_to_move 手番
    */
-  void Print(Color side_to_move) const;
+  // constを削除
+  //void Print(Color side_to_move) const;
+  void Print(Color side_to_move);
 
   /** KP（King-Piece）に関する評価値. */
   ArrayMap<PackedScore, Color> kp{PackedScore(0), PackedScore(0)};
@@ -199,6 +203,18 @@ struct EvalDetail {
 
   /** やねうら王classicの評価値. */
   YaneuraOuClassicEvalDetail yaneuraou_classic_eval_detail;
+
+
+  // ----- 各々のソフトの最終的な評価値
+
+  /** 技巧の評価値（最終的な計算結果）. */
+  Score final_score_gikou;
+
+  /** やねうら王classicの評価値（最終的な計算結果）. */
+  Score final_score_yaneuraou_classic;
+
+  // -----
+
 };
 
 /**

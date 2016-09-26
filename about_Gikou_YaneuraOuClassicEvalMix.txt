@@ -83,3 +83,18 @@
   KPP         =  -129.76　　　 ←やねうら王classicのKPP（King-Piece-Piece）
   ----------
 
+
+■Gikou_YaneuraOuClassicEvalMix_20160912
+「Gikou_YaneuraOuClassicEvalMix_20160809」からの変更点
+　・評価関数ファイルを読込むタイミングを変更しました。
+　　* 変更前：isreadyの度に毎回読み込む。
+　　* 変更後：初回のisreadyのときのみ読み込む。
+
+
+■Gikou_YaneuraOuClassicEvalMix_BothGains_20160926
+「Gikou_YaneuraOuClassicEvalMix_20160912」からの変更点
+　・試験的に、技巧とやねうら王classicの各々の評価値のGainsStatsを追加し、枝刈り（Move count based pruning）で使用する。
+　・両方のGainsStatsが負の場合にのみ、枝刈りするように変更。（枝刈りの条件を少し厳しくした）
+　・元々のGainsStatsは指し手の実現確率の算出で使用されているので、そのままにしておく。
+
+

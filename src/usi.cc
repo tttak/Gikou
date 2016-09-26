@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou YaneuraOuClassicEvalMix 20160912";
+const auto kProgramName = "Gikou YaneuraOuClassicEvalMix_BothGains 20160926";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
