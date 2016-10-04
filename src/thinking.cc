@@ -28,6 +28,16 @@
 #include "usi.h"
 #include "usi_protocol.h"
 
+
+// 探索で実現確率を使用する深さの最小値
+extern int g_UseProbabilityMinDepth;
+
+// Stockfish7のStats
+extern SfHistoryStats g_arySfHistory[8];
+extern CounterMoveHistoryStats g_aryCounterMoveHistory[8];
+extern FromToStats g_aryFromTo[8];
+
+
 namespace {
 
 const char* kBookFile = "book.bin";
@@ -43,6 +53,18 @@ Thinking::Thinking(const UsiOptions& usi_options)
 void Thinking::Initialize() {
   book_.ReadFromFile(kBookFile);
   shared_data_.hash_table.SetSize(usi_options_["USI_Hash"]);
+
+  // 探索で実現確率を使用する深さの最小値
+  g_UseProbabilityMinDepth = usi_options_["Z01_UseProbabilityMinDepth"];
+
+  // Stockfish7のStatsのクリア
+  // TODO とりあえず配列の要素数は8固定。あとでスレッド数に応じて変更できるようにする予定。
+  for (int i = 0; i < 8; i++) {
+    g_arySfHistory[i].clear();
+    g_aryCounterMoveHistory[i].clear();
+    g_aryFromTo[i].clear();
+  }
+
 }
 
 void Thinking::StartNewGame() {

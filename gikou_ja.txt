@@ -11,3 +11,4 @@ OwnBook              定跡を使う
 SuddenDeathMargin    切れ負けルール時の余裕(秒)
 Threads              スレッド数
 TinyBook             出現頻度の低い定跡手を選ばない
+Z01_UseProbabilityMinDepth  探索で実現確率を使用する深さの最小値

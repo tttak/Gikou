@@ -60,6 +60,10 @@ class Search {
     Depth reduction;
     Score static_score;
     bool skip_null_move;
+
+    // Stockfish7対応
+    CounterMoveStats* counterMoves;
+    int moveCount;
   };
 
   static void Init();
@@ -110,6 +114,14 @@ class Search {
     multipv_ = std::max(multipv, 1);
   }
 
+  void set_limit_depth(int limit_depth) {
+    limit_depth_ = std::max(std::min(limit_depth, kMaxPly - 1), 1);
+  }
+
+  void set_limit_nodes(uint64_t limit_nodes) {
+    limit_nodes_ = limit_nodes > 1ULL ? limit_nodes : 1ULL;
+  }
+
   std::vector<Move> GetPv() const;
 
   const RootMove& GetBestRootMove() const;
@@ -130,8 +142,17 @@ class Search {
 
   void PrepareForNextSearch();
 
+
+  // Stockfish7のStats
+  SfHistoryStats* sf_history_;
+  CounterMoveHistoryStats* counter_move_history_;
+  FromToStats* from_to_;
+
+
  private:
-  static constexpr int kStackSize = kMaxPly + 6;
+  // Stockfish7対応
+  //static constexpr int kStackSize = kMaxPly + 6;
+  static constexpr int kStackSize = kMaxPly + 9;
 
   template<NodeType kNodeType>
   Score QuiecenceSearch(Node& node, Score alpha, Score beta, Depth depth,
@@ -145,19 +166,28 @@ class Search {
   Score QuiecenceSearch(Node& node, Score alpha, Score beta, Depth depth,
                         int ply);
 
+  // Stockfish7対応
+  void UpdateCmStats(Search::Stack* ss, Piece pc, Square sq, int bonus);
+
+  // Stockfish7対応
   void UpdateStats(Search::Stack* ss, Move move, Depth depth, Move* quiets,
-                   int quiets_count);
+                   int quiets_count, int bonus, Node& node);
 
   void SendUsiInfo(const Node& node, int depth, int64_t time, uint64_t nodes,
                    Bound bound = kBoundExact) const;
 
   void ResetSearchStack() {
-    std::memset(stack_.begin(), 0, 5 * sizeof(Stack));
+    // Stockfish7対応
+    //std::memset(stack_.begin(), 0, 5 * sizeof(Stack));
+    std::memset(stack_.begin(), 0, 8 * sizeof(Stack));
   }
 
   Stack* search_stack_at_ply(int ply) {
     assert(0 <= ply && ply <= kMaxPly);
-    return stack_.begin() + 2 + ply; // stack_at_ply(0) - 2 の参照を可能にするため
+
+    // Stockfish7対応
+    //return stack_.begin() + 2 + ply; // stack_at_ply(0) - 2 の参照を可能にするため
+    return stack_.begin() + 5 + ply; // stack_at_ply(0) - 5 の参照を可能にするため
   }
 
   SharedData& shared_;
@@ -165,6 +195,8 @@ class Search {
   uint64_t num_nodes_searched_ = 0;
   int max_reach_ply_ = 0;
   int multipv_ = 1, pv_index_ = 0;
+  uint64_t limit_nodes_ = 1152921504606846976ULL;
+  int limit_depth_ = kMaxPly - 1;
   bool learning_mode_ = false;
   Array<Stack, kStackSize> stack_;
   PvTable pv_table_;

@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou 20160606";
+const auto kProgramName = "Gikou Stockfish7 20161004";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -334,6 +334,9 @@ UsiOptions::UsiOptions() {
 
   // 勝ち数が少ない定跡を除外する場合はtrue
   map_.emplace("TinyBook", UsiOption(false));
+
+  // 探索で実現確率を使用する深さの最小値
+  map_.emplace("Z01_UseProbabilityMinDepth" , UsiOption(8, 0, 100));
 }
 
 void UsiOptions::PrintListOfOptions() {

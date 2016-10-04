@@ -51,6 +51,7 @@ inline bool is_greater(const ExtMove& lhs, const ExtMove& rhs) {
 }
 
 inline bool has_good_score(const ExtMove& em) {
+  // TODO ScoreMoves<kQuiets>()でhistory_[move]を使用しない場合はここも変える必要があるので注意
   return em.score > (HistoryStats::kMax / 2);
 }
 
@@ -77,7 +78,8 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
                        const Array<Move, 2>& killermoves,
                        const Array<Move, 2>& countermoves,
                        const Array<Move, 2>& followupmoves,
-                       Search::Stack* const ss)
+                       Search::Stack* const ss
+                       , const Search& search, bool use_probability)
     : pos_(pos),
       history_(history),
       gains_(gains),
@@ -85,7 +87,8 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
       depth_(depth),
       killermoves_(killermoves),
       countermoves_(countermoves),
-      followupmoves_(followupmoves) {
+      followupmoves_(followupmoves)
+      , search_(search) {
   assert(hash_move.IsOk());
   assert(depth > kDepthZero);
   assert(ss != nullptr);
@@ -98,7 +101,8 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
   // 指し手生成のカテゴリをセットする
   if (pos.in_check()) {
     stage_ = kEvasion;
-  } else if (depth >= 8 * kOnePly) {
+  //} else if (depth >= 8 * kOnePly) {
+  } else if (use_probability) {
     stage_ = kProbSearch;
   } else {
     stage_ = kMainSearch;
@@ -112,11 +116,13 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
 }
 
 MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
-                       const GainsStats& gains, Depth depth, Move hash_move)
+                       const GainsStats& gains, Depth depth, Move hash_move
+                       , const Search& search)
     : pos_(pos),
       history_(history),
       gains_(gains),
-      depth_(depth) {
+      depth_(depth)
+      , search_(search) {
   assert(hash_move.IsOk());
   assert(depth <= kDepthZero);
 
@@ -147,11 +153,13 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
 }
 
 MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
-                       const GainsStats& gains, Move hash_move)
+                       const GainsStats& gains, Move hash_move
+                       , const Search& search)
     : pos_(pos),
       history_(history),
       gains_(gains),
-      stage_(kProbCut) {
+      stage_(kProbCut)
+      , search_(search) {
   // ポインタを初期化する
   cur_ = moves_.begin();
   end_ = moves_.begin();
@@ -291,23 +299,57 @@ void MovePicker::ScoreMoves<kCaptures>() {
 
 template<>
 void MovePicker::ScoreMoves<kQuiets>() {
+  // Stockfish7対応
+  const SfHistoryStats& sf_history = *(search_.sf_history_);
+  const FromToStats& from_to = *(search_.from_to_);
+
+  const CounterMoveStats* cm = (ss_-1)->counterMoves;
+  const CounterMoveStats* fm = (ss_-2)->counterMoves;
+  const CounterMoveStats* f2 = (ss_-4)->counterMoves;
+
+  Color c = pos_.side_to_move();
+
   for (ExtMove* it = moves_.begin(); it != end_; ++it) {
-    it->score = history_[it->move];
+    Move move = it->move;
+    Piece pc = move.piece_after_move();
+    Square sq = move.to();
+
+    //it->score = history_[it->move];
+    it->score = history_[move]
+              + sf_history[pc][sq]
+              + (cm ? (*cm)[pc][sq] : kScoreZero)
+              + (fm ? (*fm)[pc][sq] : kScoreZero)
+              + (f2 ? (*f2)[pc][sq] : kScoreZero)
+              + from_to.get(c, move);
   }
 }
 
 template<>
 void MovePicker::ScoreMoves<kEvasions>() {
+  // Stockfish7対応
+  const SfHistoryStats& sf_history = *(search_.sf_history_);
+  const FromToStats& from_to = *(search_.from_to_);
+
+  Color c = pos_.side_to_move();
+
   for (ExtMove* it = moves_.begin(); it != end_; ++it) {
     Move move = it->move;
+    Piece pc = move.piece_after_move();
+
     Score swap_score = Swap::Evaluate(move, pos_);
     if (swap_score < kScoreZero) {
-      it->score = swap_score - HistoryStats::kMax; // 末尾に
+      //it->score = swap_score - HistoryStats::kMax; // 末尾に
+      it->score = swap_score - 25000; // 末尾に
     } else if (!move.is_quiet()) {
-      it->score = GetMvvLvaScore(move) + HistoryStats::kMax; // 先頭に
+      //it->score = GetMvvLvaScore(move) + HistoryStats::kMax; // 先頭に
+      it->score = GetMvvLvaScore(move) + 25000; // 先頭に
       it->score += move.is_promotion();
     } else {
-      it->score = history_[move];
+      // Stockfish7対応
+      //it->score = history_[move];
+      it->score = history_[move]
+                + sf_history[pc][move.to()]
+                + from_to.get(c, move);
     }
   }
 }
@@ -318,9 +360,13 @@ void MovePicker::GenerateNext() {
       cur_ = moves_.begin();
       end_ = GenerateMoves<kAllMoves>(pos_, cur_);
       end_ = RemoveIllegalMoves(pos_, cur_, end_);
+
       // 指し手の実現確率を計算する
+      //auto probabilities = MoveProbability::ComputeProbabilities(pos_, history_,
+      //                                                           gains_);
       auto probabilities = MoveProbability::ComputeProbabilities(pos_, history_,
-                                                                 gains_);
+                                                                 gains_, cur_, end_);
+
       // 指し手の実現確率が高い順にソートする
       for (ExtMove* it = cur_; it != end_; ++it) {
         double p = probabilities[it->move.ToUint32()];
