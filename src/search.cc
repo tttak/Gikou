@@ -42,6 +42,16 @@
 #include "usi.h"
 #include "zobrist.h"
 
+// 探索で実現確率を使用する深さの最小値
+int g_UseProbabilityMinDepth;
+
+// Stockfish7のStats
+// TODO とりあえず配列の要素数は8固定。あとでスレッド数に応じて変更できるようにする予定。
+SfHistoryStats g_arySfHistory[8];
+CounterMoveHistoryStats g_aryCounterMoveHistory[8];
+FromToStats g_aryFromTo[8];
+
+
 namespace {
 
 // 開発時に参照する統計データ
@@ -52,15 +62,6 @@ uint64_t g_num_beta_cuts = 0;
 Array<uint64_t, 64> g_cuts_by_move;
 
 Array<int16_t, 2, 2, 64, 64> g_reductions; // [pv][improving][depth][moveNumber]
-
-// デバッグ用
-#if 0
-uint64_t g_cnt_1 = 0;
-uint64_t g_cnt_2 = 0;
-uint64_t g_cnt_3 = 0;
-uint64_t g_cnt_4 = 0;
-#endif
-
 
 const Array<std::vector<int>, 20> g_half_density = {
     {0, 1},
@@ -85,9 +86,17 @@ const Array<std::vector<int>, 20> g_half_density = {
     {1, 0, 0, 0, 0, 1, 1 ,1},
 };
 
+// Stockfish7対応
+const int razor_margin_score[4] = { 483, 570, 603, 554 };
+
 inline Score razor_margin(Depth depth) {
-  return static_cast<Score>(512 + 32 * (depth / kOnePly));
+  // Stockfish7対応
+  //return static_cast<Score>(512 + 32 * (depth / kOnePly));
+  return (Score)razor_margin_score[depth / kOnePly];
 }
+
+// Stockfish7対応
+int FutilityMoveCounts[2][16];  // [improving][depth]
 
 inline int futility_move_count(bool is_pv_node, Depth depth) {
   return (is_pv_node ? 8 : 6) * depth / kOnePly;
@@ -147,11 +156,25 @@ void Search::Init() {
         g_reductions[0][0][d][mc] += kOnePly / 2;
       }
     }
+
+
+  // Stockfish7対応
+  for (int d = 0; d < 16; ++d) {
+    FutilityMoveCounts[0][d] = int(2.4 + 0.773 * pow(d + 0.00, 1.8));
+    FutilityMoveCounts[1][d] = int(2.9 + 1.045 * pow(d + 0.49, 1.8));
+  }
+
 }
 
 Search::Search(SharedData& shared, size_t thread_id)
     : shared_(shared),
       thread_id_(thread_id) {
+
+  // Stockfish7のStats
+  // TODO とりあえず配列の要素数は8固定。あとでスレッド数に応じて変更できるようにする予定。
+  sf_history_ = &g_arySfHistory[thread_id_ % 8];
+  counter_move_history_ = &g_aryCounterMoveHistory[thread_id_ % 8];
+  from_to_ = &g_aryFromTo[thread_id_ % 8];
 }
 
 std::vector<Move> Search::GetPv() const {
@@ -443,6 +466,10 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   (ss+1)->reduction = kDepthZero;
   (ss+2)->killers[0] = (ss+2)->killers[1] = kMoveNone;
 
+  // Stockfish7対応
+  ss->moveCount = 0;
+  ss->counterMoves = nullptr;
+
   if (!kIsRoot) {
     // 最大手数に到達したら、探索を打ち切る
     if (shared_.signals.stop) {
@@ -494,7 +521,11 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
         && hash_move != kMoveNone
         && hash_move.is_quiet()
         && !in_check) {
-      UpdateStats(ss, hash_move, depth, nullptr, 0);
+
+      // Stockfish7対応
+      int d = depth / kOnePly;
+      int bonus = d * d + 2 * d - 2;
+      UpdateStats(ss, hash_move, depth, nullptr, 0, bonus, node);
     }
     return hash_score;
   }
@@ -604,6 +635,9 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
     ss->current_move = kMoveNull;
     assert(eval - beta >= 0);
 
+    // Stockfish7対応
+    ss->counterMoves = nullptr;
+
     // 削減する深さの決定
     Depth R = 3 * kOnePly + depth / 4 + int(eval - beta) / 200 * kOnePly;
 
@@ -635,7 +669,7 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
     assert(rdepth >= kOnePly);
     assert((ss-1)->current_move.is_real_move());
 
-    MovePicker mp(node, history_, gains_, hash_move);
+    MovePicker mp(node, history_, gains_, hash_move, *this);
 
     double dummy;
     for (Move move; (move = mp.NextMove(&dummy)) != kMoveNone;)
@@ -645,6 +679,9 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
         shared_.hash_table.Prefetch(key_after_move);
 
         ss->current_move = move;
+
+        // Stockfish7対応
+        ss->counterMoves = &(*counter_move_history_)[move.piece_after_move()][move.to()];
 
         node.MakeMove(move, node.MoveGivesCheck(move), key_after_move);
         Score score = -MainSearch<kNonPvNode>(node, -rbeta, -rbeta + 1, rdepth,
@@ -675,8 +712,19 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
 
   const Array<Move, 2> countermoves = countermoves_[(ss-1)->current_move];
   const Array<Move, 2> followupmoves = followupmoves_[(ss-2)->current_move];
+
+  // Stockfish7対応
+  const CounterMoveStats* cmh  = (ss-1)->counterMoves;
+  const CounterMoveStats* fmh  = (ss-2)->counterMoves;
+  const CounterMoveStats* fmh2 = (ss-4)->counterMoves;
+
+  // 実現確率を使用するか否か
+  bool use_probability = (depth >= g_UseProbabilityMinDepth * kOnePly);
+
+
   MovePicker move_picker(node, history_, gains_, depth, hash_move,
-                         ss->killers, countermoves, followupmoves, ss);
+                         ss->killers, countermoves, followupmoves, ss
+                         , *this, use_probability);
 
   const bool improving =   ss->static_score >= (ss-2)->static_score
                         || ss->static_score == kScoreNone
@@ -716,7 +764,10 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
     // ルートノードにおいては、非合法手はすでにスキップされているはず。
     assert(!kIsRoot || node.PseudoLegalMoveIsLegal(move));
 
-    ++move_count;
+    // Stockfish7対応
+    //++move_count;
+    ss->moveCount = ++move_count;
+    Piece moved_piece = move.piece_after_move();
 
     if (kIsRoot && move_count == 1) {
       shared_.signals.first_move_completed = false; // 最善手の探索をまだ終えていない
@@ -725,6 +776,10 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
     Depth ext = kDepthZero;
     const bool move_is_quiet = move.is_quiet();
     const bool move_gives_check = node.MoveGivesCheck(move);
+
+    // Stockfish7対応
+    bool moveCountPruning = depth < 16 * kOnePly
+                          && move_count >= FutilityMoveCounts[improving][depth / kOnePly];
 
     // 王手延長
     if (move_gives_check) {
@@ -763,36 +818,6 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
      /* && move != ttMove Already implicit in the next condition */
         && best_score > kScoreMatedInMaxPly) {
 
-// デバッグ用
-#if 0
-      if (   depth < 16 * kOnePly
-          && move_count >= futility_move_count(kIsPv, depth)
-          && history_.HasNegativeScore(move)) {
-
-        //std::printf("gains_      [%s] =%+6d\n", move.ToSfen().c_str(), gains_      [move]);
-        //std::printf("gains_gikou_[%s] =%+6d\n", move.ToSfen().c_str(), gains_gikou_[move]);
-        //std::printf("gains_apery_[%s] =%+6d\n", move.ToSfen().c_str(), gains_apery_[move]);
-
-        g_cnt_1++;
-
-        if (gains_[move] < kScoreZero) {
-          g_cnt_2++;
-        }
-
-        if (gains_gikou_[move] < kScoreZero
-         && gains_apery_[move] < kScoreZero) {
-          g_cnt_3++;
-        }
-
-        if (gains_[move] < kScoreZero
-         && gains_gikou_[move] < kScoreZero
-         && gains_apery_[move] < kScoreZero) {
-          g_cnt_4++;
-        }
-
-      }
-#endif
-
       // Move count based pruning
       // 各々のソフトの評価値のGainsStatsを使用する
       //if (   depth < 16 * kOnePly
@@ -810,9 +835,18 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
         continue;
       }
 
-
       Depth r = reduction<kIsPv>(improving, depth, move_count);
       Depth predicted_depth = new_depth - r;
+
+#if 0
+      // Stockfish7対応
+      if (   predicted_depth < 3 * kOnePly
+        && (!cmh  || (*cmh )[moved_piece][move.to()] < kScoreZero)
+        && (!fmh  || (*fmh )[moved_piece][move.to()] < kScoreZero)
+        && (!fmh2 || (*fmh2)[moved_piece][move.to()] < kScoreZero || (cmh && fmh))) {
+        continue;
+      }
+#endif
 
       // futility pruning
       if (predicted_depth < 7 * kOnePly) {
@@ -833,7 +867,9 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
     // 合法手か否かをチェックする
     if (   !kIsRoot
         && !node.PseudoLegalMoveIsLegal(move)) {
-      move_count--;
+      // Stockfish7対応
+      //move_count--;
+      ss->moveCount = move_count--;
       continue;
     }
 
@@ -843,6 +879,10 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
 
     const bool is_pv_move = kIsPv && move_count == 1;
     ss->current_move = move;
+
+    // Stockfish7対応
+    ss->counterMoves = &(*counter_move_history_)[moved_piece][move.to()];
+
     if (move_is_quiet && quiet_count < 64) {
       quiets_searched[quiet_count++] = move;
     }
@@ -864,13 +904,15 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
     // 本当はすべて実現確率にしたいところだが、実現確率の計算コストが高いため、残り深さが大きい
     // ところに限って実現確率を用いている
     if (   depth >= 3 * kOnePly
-        && (move_is_quiet || depth >= 8 * kOnePly)
+        //&& (move_is_quiet || depth >= 8 * kOnePly)
+        && (move_is_quiet || use_probability)
         && move_count >= 2
         && move != ss->killers[0]
         && move != ss->killers[1]) {
 
       // 実現確率
-      if (depth >= 8 * kOnePly) {
+      //if (depth >= 8 * kOnePly) {
+      if (use_probability) {
         // 指し手の確率に基づいて、何手減らすかを決定する
         const double kPvFactor = kIsPv ? 0.75 : 1.0;
         double consumption = kPvFactor * -std::log(probability) / std::log(2.0);
@@ -996,10 +1038,41 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
         best_score = score_mated_in(ply); // 詰まされた
       }
     }
-  } else if (best_score >= beta && best_move.is_quiet() && !in_check) {
-    // 最善手が静かな手の場合は、キラー手等を更新する
-    UpdateStats(ss, best_move, depth, quiets_searched.begin(), quiet_count - 1);
   }
+
+  // Stockfish7対応
+  //} else if (best_score >= beta && best_move.is_quiet() && !in_check) {
+  else if (best_move != kMoveNone) {
+    int d = depth / kOnePly;
+
+    if (best_move.is_quiet()) {
+      // 最善手が静かな手の場合は、キラー手等を更新する
+      int bonus = d * d + 2 * d - 2;
+      UpdateStats(ss, best_move, depth, quiets_searched.begin(), quiet_count - 1, bonus, node);
+    }
+
+    // Extra penalty for a quiet TT move in previous ply when it gets refuted
+    //if ((ss-1)->moveCount == 1 && !pos.captured_piece())
+    if ((ss-1)->moveCount == 1 && (ss-1)->current_move.is_quiet()) {
+      int penalty = d * d + 4 * d + 1;
+      Square prevSq = (ss-1)->current_move.to();
+      Piece prevPc = (ss-1)->current_move.piece_after_move();
+      UpdateCmStats(ss-1, prevPc, prevSq, -penalty);
+    }
+  }
+
+  // Bonus for prior countermove that caused the fail low
+  else if (    depth >= 3 * kOnePly
+           //&& !pos.captured_piece()
+           && (ss-1)->current_move.is_quiet()
+           && (ss-1)->current_move.is_real_move()) {
+    int d = depth / kOnePly;
+    int bonus = d * d + 2 * d - 2;
+    Square prevSq = (ss-1)->current_move.to();
+    Piece prevPc = (ss-1)->current_move.piece_after_move();
+    UpdateCmStats(ss-1, prevPc, prevSq, bonus);
+  }
+
 
   shared_.hash_table.Save(pos_key, best_move, ScoreToTt(best_score, ply), depth,
                           best_score >= beta              ? kBoundLower :
@@ -1115,7 +1188,7 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
   assert(0.0 <= progress && progress <= 1.0);
 
   // MovePickerオブジェクトを更新する
-  MovePicker mp(node, history_, gains_, depth, hash_move);
+  MovePicker mp(node, history_, gains_, depth, hash_move, *this);
   Move best_move = kMoveNone;
 
   // βカットするか、残りの手がなくなるまで、探索する
@@ -1241,8 +1314,29 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
   return best_score;
 }
 
+
+// Stockfish7対応
+void Search::UpdateCmStats(Search::Stack* ss, Piece pc, Square sq, int bonus) {
+  CounterMoveStats* cmh  = (ss-1)->counterMoves;
+  CounterMoveStats* fmh1 = (ss-2)->counterMoves;
+  CounterMoveStats* fmh2 = (ss-4)->counterMoves;
+
+  if (cmh) {
+    cmh->update(pc, sq, bonus);
+  }
+
+  if (fmh1) {
+    fmh1->update(pc, sq, bonus);
+  }
+
+  if (fmh2) {
+    fmh2->update(pc, sq, bonus);
+  }
+}
+
 void Search::UpdateStats(Stack* const ss, Move move, Depth depth,
-                         Move* const quiets, int quiets_count) {
+                         Move* const quiets, int quiets_count
+                         , int bonus, Node& node) {
   assert(ss != nullptr);
   assert(quiets != nullptr || quiets_count == 0);
 
@@ -1266,6 +1360,28 @@ void Search::UpdateStats(Stack* const ss, Move move, Depth depth,
   if (   (ss-2)->current_move.is_real_move()
       && (ss-1)->current_move == (ss-1)->hash_move) {
     followupmoves_.Update((ss-2)->current_move, move);
+  }
+
+
+  // Stockfish7対応
+  Piece pc = move.piece_after_move();
+  Square sq = move.to();
+  Color c = node.side_to_move();
+
+  from_to_->update(c, move, bonus);
+  sf_history_->update(pc, sq, bonus);
+  UpdateCmStats(ss, pc, sq, bonus);
+
+
+  // Decrease all the other played quiet moves
+  for (int i = 0; i < quiets_count; ++i) {
+      Move q_move = quiets[i];
+      Piece q_pc = q_move.piece_after_move();
+      Square q_sq = q_move.to();
+
+      from_to_->update(c, q_move, -bonus);
+      sf_history_->update(q_pc, q_sq, -bonus);
+      UpdateCmStats(ss, q_pc, q_sq, -bonus);
   }
 }
 
@@ -1331,14 +1447,4 @@ void Search::SendUsiInfo(const Node& node, int depth, int64_t time,
 
   // infoコマンドをまとめて標準出力へ出力する
   SYNCED_PRINTF("%s", buf.c_str());
-
-
-// デバッグ用
-#if 0
-   std::printf("g_cnt_1=%d\n", g_cnt_1);
-   std::printf("g_cnt_2=%d\n", g_cnt_2);
-   std::printf("g_cnt_3=%d\n", g_cnt_3);
-   std::printf("g_cnt_4=%d\n", g_cnt_4);
-#endif
-
 }

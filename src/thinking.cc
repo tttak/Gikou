@@ -36,6 +36,15 @@ int g_AperyEvalEndGame;
 // Aperyの評価関数バイナリのフォルダ
 std::string g_AperyEvalFolder;
 
+// 探索で実現確率を使用する深さの最小値
+extern int g_UseProbabilityMinDepth;
+
+// Stockfish7のStats
+extern SfHistoryStats g_arySfHistory[8];
+extern CounterMoveHistoryStats g_aryCounterMoveHistory[8];
+extern FromToStats g_aryFromTo[8];
+
+
 namespace {
 
 const char* kBookFile = "book.bin";
@@ -59,6 +68,18 @@ void Thinking::Initialize() {
 
   // Aperyの評価関数バイナリのフォルダ
   g_AperyEvalFolder = usi_options_["Z04_AperyEvalFolder"].str_value();
+
+  // 探索で実現確率を使用する深さの最小値
+  g_UseProbabilityMinDepth = usi_options_["Z10_UseProbabilityMinDepth"];
+
+  // Stockfish7のStatsのクリア
+  // TODO とりあえず配列の要素数は8固定。あとでスレッド数に応じて変更できるようにする予定。
+  for (int i = 0; i < 8; i++) {
+    g_arySfHistory[i].clear();
+    g_aryCounterMoveHistory[i].clear();
+    g_aryFromTo[i].clear();
+  }
+
 }
 
 void Thinking::StartNewGame() {

@@ -15,3 +15,4 @@ Z01_AperyEvalJoban   Aperyの評価値の割合(序盤、%)
 Z02_AperyEvalChuban  Aperyの評価値の割合(中盤、%)
 Z03_AperyEvalShuban  Aperyの評価値の割合(終盤、%)
 Z04_AperyEvalFolder  Apery評価関数バイナリのフォルダ
+Z10_UseProbabilityMinDepth  探索で実現確率を使用する深さの最小値

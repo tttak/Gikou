@@ -110,3 +110,7 @@
 　・元々のGainsStatsは指し手の実現確率の算出で使用されているので、そのままにしておく。
 
 
+■Gikou_AperyEvalMixNoTurn_Stockfish7_20161008
+「Gikou_AperyEvalMixNoTurn_BothGains_20160918」からの変更点
+　・Stockfish7の探索部を取り込み中。
+

@@ -167,4 +167,62 @@ class MovesStats {
   ArrayMap<Array<Move, 2>, Square, Piece> table_;
 };
 
+
+// Stockfish7のStats
+template<typename T, bool CM = false>
+struct Stats {
+
+  static const int Max = int(1 << 28);
+
+  const T* operator[](Piece pc) const { return table[pc]; }
+  T* operator[](Piece pc) { return table[pc]; }
+  void clear() { std::memset(table, 0, sizeof(table)); }
+  void update(Piece pc, Square to, Move m) { table[pc][to] = m; }
+  void update(Piece pc, Square to, int v) {
+
+    if (abs(int(v)) >= 324)
+        return;
+
+    table[pc][to] -= table[pc][to] * abs(int(v)) / (CM ? 936 : 324);
+    table[pc][to] += int(v) * 32;
+  }
+
+private:
+  T table[32][81];
+};
+
+typedef Stats<Move> MoveStats;
+
+// オリジナルの技巧のHistoryStatsと区別するため、名前を「SfHistoryStats」とする。
+typedef Stats<int, false> SfHistoryStats;
+
+typedef Stats<int,  true> CounterMoveStats;
+typedef Stats<CounterMoveStats> CounterMoveHistoryStats;
+
+
+// Stockfish7のFromToStats
+struct FromToStats {
+
+  int get(Color c, Move m) const { return table[c][m.is_drop() ? 81 : m.from()][m.to()]; }
+  void clear() { std::memset(table, 0, sizeof(table)); }
+  void update(Color c, Move m, int v) {
+
+    if (abs(int(v)) >= 324)
+        return;
+
+    int from = m.is_drop() ? 81 : m.from();
+    Square to = m.to();
+
+    table[c][from][to] -= table[c][from][to] * abs(int(v)) / 324;
+    table[c][from][to] += int(v) * 32;
+  }
+
+private:
+  // [color][from][to]
+  // fromについて
+  // 　・駒打ち以外の場合、fromは0～80
+  // 　・駒打ちの場合、fromは81
+  int table[2][81+1][81];
+};
+
 #endif /* STATS_H_ */
