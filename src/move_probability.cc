@@ -508,6 +508,46 @@ std::unordered_map<uint32_t, float> MoveProbability::ComputeProbabilities(const 
   return move_probabilities;
 }
 
+// この処理の中では指し手生成を行わず、引数で受け取る。
+std::unordered_map<uint32_t, float> MoveProbability::ComputeProbabilities(const Position& pos,
+                                                                          const HistoryStats& history,
+                                                                          const GainsStats& gains
+                                                                          , ExtMove* begin
+                                                                          , ExtMove* end) {
+  // 合法手を生成する
+  //SimpleMoveList<kAllMoves, true> legal_moves(pos);
+
+  // 局面情報を収集する
+  PositionSample sample;
+  PositionInfo pos_info(pos, history, gains);
+  sample.progress = Progress::EstimateProgress(pos);
+
+  //for (ExtMove em : legal_moves) {
+  //  sample.features.push_back(ExtractMoveFeatures(em.move, pos, pos_info));
+  //}
+  for (ExtMove* it = begin; it != end; ++it) {
+    sample.features.push_back(ExtractMoveFeatures(it->move, pos, pos_info));
+  }
+
+  // 確率を計算する
+  std::valarray<double> p = ComputeMoveProbabilities(sample);
+
+  // 指し手と確率を対応付ける
+  std::unordered_map<uint32_t, float> move_probabilities;
+
+  //for (size_t i = 0; i < legal_moves.size(); ++i) {
+  //  move_probabilities.emplace(legal_moves[i].move.ToUint32(), p[i]);
+  //}
+
+  size_t i = 0;
+  for (ExtMove* it = begin; it != end; ++it) {
+    move_probabilities.emplace(it->move.ToUint32(), p[i]);
+    i++;
+  }
+
+  return move_probabilities;
+}
+
 void MoveProbability::Init() {
   g_weights.resize(kNumMoveFeatures);
 

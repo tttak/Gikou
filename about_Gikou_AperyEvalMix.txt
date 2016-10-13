@@ -93,3 +93,13 @@
 　　 今回の変更で3次元配列[81][2110][2110]として保持することになったため、メモリ使用量が増えました。
 　　 （技巧の評価関数では「と～成銀」を「金」と区別しているため、PsqIndexの数がAperyより多くなっています。）
 
+
+■Gikou_AperyEvalMix_Stockfish7_20161013
+「Gikou_AperyEvalMix_20160905」からの変更点
+　【BothGains関連】
+　　・試験的に、技巧とAperyの各々の評価値のGainsStatsを追加し、枝刈り（Move count based pruning）で使用する。
+　　・両方のGainsStatsが負の場合にのみ、枝刈りするように変更。（枝刈りの条件を少し厳しくした）
+　　・元々のGainsStatsは指し手の実現確率の算出で使用されているので、そのままにしておく。
+　【Stockfish7関連】
+　　・Stockfish7の探索部を取り込み中。
+

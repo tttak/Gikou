@@ -37,6 +37,16 @@ struct MoveProbability {
                                                                   const GainsStats& gains);
 
   /**
+   * 指し手が指される確率を計算します.
+   * ・この処理の中では指し手生成を行わず、引数で受け取る。
+   */
+  static std::unordered_map<uint32_t, float> ComputeProbabilities(const Position& pos,
+                                                                  const HistoryStats& history,
+                                                                  const GainsStats& gains
+                                                                  , ExtMove* begin
+                                                                  , ExtMove* end);
+
+  /**
    * 指し手が指される確率を棋譜から学習します.
    *
    * 現在の実装では、激指の方法（二値分類）を発展させて、多クラスロジスティック回帰により、

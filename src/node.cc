@@ -121,6 +121,12 @@ Score Node::Evaluate(double* const progress) {
   }
 #endif
 
+
+  // 各々のソフトの最終的な評価値を保存
+  this->final_score_gikou = current->eval_detail.final_score_gikou;
+  this->final_score_apery = current->eval_detail.final_score_apery;
+
+
 // デバッグ用
 #if 0
   if (score != Evaluation::Evaluate(*this)) {
