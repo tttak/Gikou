@@ -46,12 +46,14 @@ const int fe_end = 1548;
 // ・nozomiにはKKは存在しない
 //typedef int16_t ValueKk;
 typedef int16_t ValueKkp;
+typedef int16_t ValueKkpt;
 typedef int16_t ValueKpp;
 
 // nozomiの評価関数パラメータ（技巧のPsqIndexへの変換後）
 // ・nozomiにはKKは存在しない
 //ValueKk  kk_nozomi [81][81];
 ValueKkp kkp_nozomi[81][81][2110];
+ValueKkpt kkpt_nozomi[81][81][2110][2];
 ValueKpp kpp_nozomi[81][2110][2110];
 
 
@@ -197,11 +199,16 @@ inline EvalDetail SumPositionalScore(const PsqPair psq, const PsqList& list,
 
   // 3. nozomiのKKPとKPP
   // ・KKは計算不要。この「特定の１駒」は玉ではないので。
+  // ・nozomiのKKPTは常に全計算する。（差分計算はしない）
   NozomiEvalDetail nozomi_eval_detail;
   const Square sq_wk = pos.king_square(kWhite);
 
+  //Color side_to_move = pos.side_to_move();
+
   // KKP
   nozomi_eval_detail.kkp_board = kkp_nozomi[bk][sq_wk][psq.black()];
+  // KKPT
+  //nozomi_eval_detail.kkp_turn = kkpt_nozomi[bk][sq_wk][psq.black()][side_to_move];
 
   for (const PsqPair& j : list) {
     if (j.black() != psq.black()) {
@@ -248,12 +255,18 @@ inline EvalDetail SumPositionalScore(const PsqPair psq1, const PsqPair psq2,
 
   // 4. nozomiのKKPとKPP
   // ・KKは計算不要。この「特定の２駒」は玉ではないので。
+  // ・nozomiのKKPTは常に全計算する。（差分計算はしない）
   NozomiEvalDetail nozomi_eval_detail;
   const Square sq_wk = pos.king_square(kWhite);
+
+  //Color side_to_move = pos.side_to_move();
 
   // KKP
   nozomi_eval_detail.kkp_board = kkp_nozomi[bk][sq_wk][psq1.black()]
                                + kkp_nozomi[bk][sq_wk][psq2.black()];
+  // KKPT
+  //nozomi_eval_detail.kkp_turn  = kkpt_nozomi[bk][sq_wk][psq1.black()][side_to_move]
+  //                             + kkpt_nozomi[bk][sq_wk][psq2.black()][side_to_move];
 
   // 駒１のKPP
   for (const PsqPair& j : list) {
@@ -600,12 +613,14 @@ EvalDetail EvaluateDifferenceForKingMove(const Position& pos,
   }
 
 
-  // 3. 移動した玉に関するnozomiのKK、KKP、KPPのスコアを再計算する
+  // 3. 移動した玉に関するnozomiのKK、KKP、KKPT、KPPのスコアを再計算する
   NozomiEvalDetail nozomi_eval_detail;
 
   const Square sq_bk = pos.king_square(kBlack);
   const Square sq_wk = pos.king_square(kWhite);
   const Square inv_sq_wk = Square::rotate180(pos.king_square(kWhite));
+
+  //Color side_to_move = pos.side_to_move();
 
   // KK
   // ・nozomiにはKKは存在しない
@@ -614,12 +629,15 @@ EvalDetail EvaluateDifferenceForKingMove(const Position& pos,
   //diff.nozomi_eval_detail.kk_board = nozomi_eval_detail.kk_board - previous_eval.nozomi_eval_detail.kk_board;
 
 
-  // KKP
+  // KKP、KKPT
+  // ・nozomiのKKPTは常に全計算する。（差分計算はしない）
   for (const PsqPair* i = list->begin(); i != list->end(); ++i) {
     nozomi_eval_detail.kkp_board += kkp_nozomi[sq_bk][sq_wk][i->black()];
+    //nozomi_eval_detail.kkp_turn  += kkpt_nozomi[sq_bk][sq_wk][i->black()][side_to_move];
   }
 
   diff.nozomi_eval_detail.kkp_board = nozomi_eval_detail.kkp_board - previous_eval.nozomi_eval_detail.kkp_board;
+  //diff.nozomi_eval_detail.kkp_turn  = nozomi_eval_detail.kkp_turn  - previous_eval.nozomi_eval_detail.kkp_turn;
 
 
   // KPP
@@ -787,6 +805,9 @@ EvalDetail Evaluation::EvaluateDifference(const Position& pos,
   // 4. nozomiの駒割りの差分計算
   diff.nozomi_eval_detail.material = NozomiEval::EvaluateDifferenceOfMaterial(pos) * NozomiEval::FV_SCALE;
 
+  // 5. nozomiのKKPTは常に全計算する。（差分計算はしない）
+  diff.nozomi_eval_detail.kkp_turn = NozomiEval::EvaluateKKPT(pos, *psq_list) - previous_eval.nozomi_eval_detail.kkp_turn;
+
   return diff;
 }
 
@@ -850,8 +871,10 @@ namespace NozomiEval {
 void NozomiEval::LoadEval() {
 
   //----- nozomiの評価関数ファイルの読込み
-  // ・tmp_kkp1、tmp_kpp1へ読み込む
-  std::string filename_kkpkpp = g_NozomiEvalFolder + "/new_fv.bin";
+  // ・SDT4対応（KKPT追加、new_fv.bin→kpp_kkp_kkpt.bin）
+  // ・tmp_kkp1、tmp_kpp1、tmp_kkpt1へ読み込む
+  //std::string filename_kkpkpp = g_NozomiEvalFolder + "/new_fv.bin";
+  std::string filename_kkpkpp = g_NozomiEvalFolder + "/kpp_kkp_kkpt.bin";
   std::fstream ifs_kkpkpp;
   ifs_kkpkpp.open(filename_kkpkpp, std::ios::in | std::ios::binary);
   if (ifs_kkpkpp.fail()) {
@@ -884,13 +907,28 @@ void NozomiEval::LoadEval() {
     exit(EXIT_FAILURE);
   }
 
+  // KKPT
+  int count_kkpt = SQ_NB * SQ_NB * fe_end * 2;
+  size_t size_kkpt = count_kkpt * (int)sizeof(ValueKkpt);
+  ValueKkpt* tmp_kkpt1 = new ValueKkpt[size_kkpt];
+
+  ifs_kkpkpp.read((char*)tmp_kkpt1, size_kkpt);
+  if (ifs_kkpkpp.fail()) {
+    std::printf("info string Failed to read %s.(KKPT)\n", filename_kkpkpp.c_str());
+    delete[] tmp_kkp1;
+    delete[] tmp_kpp1;
+    delete[] tmp_kkpt1;
+    exit(EXIT_FAILURE);
+  }
+
   ifs_kkpkpp.close();
 
 
   //----- nozomiの評価関数パラメータ（技巧のPsqIndexへの変換後）へ格納
-  // ・「tmp_kkp1、tmp_kpp1」から「kk_nozomi、kkp_nozomi、kpp_nozomi」へ
+  // ・「tmp_kkp1、tmp_kpp1、tmp_kkpt1」から「kk_nozomi、kkp_nozomi、kkpt_nozomi、kpp_nozomi」へ
 
   #define TMP_KKP1(k1, k2, p) tmp_kkp1[k1 * SQ_NB * fe_end + k2 * fe_end + p]
+  #define TMP_KKPT1(k1, k2, p, c) tmp_kkpt1[k1 * SQ_NB * fe_end * 2 + k2 * fe_end * 2 + p * 2 + c]
   #define TMP_KPP1(k, p1, p2) tmp_kpp1[k * fe_end * fe_end + p1 * fe_end + p2]
 
   // KK
@@ -910,6 +948,17 @@ void NozomiEval::LoadEval() {
     }
   }
 
+  // KKPT
+  for (int k1 = 0; k1 < 81; ++k1) {
+    for (int k2 = 0; k2 < 81; ++k2) {
+      for (int p = 0; p < 2110; ++p) {
+        for (int c = 0; c < 2; ++c) {
+          kkpt_nozomi[k1][k2][p][c] = TMP_KKPT1(GetNozomiSquareFromGikou_9x9(k1), GetNozomiSquareFromGikou_9x9(k2), GetNozomiPsqIndex((PsqIndex)p), c);
+        }
+      }
+    }
+  }
+
   // KPP
   for (int k = 0; k < 81; ++k) {
     for (int p1 = 0; p1 < 2110; ++p1) {
@@ -923,10 +972,12 @@ void NozomiEval::LoadEval() {
 
   // メモリ解放
   delete[] tmp_kkp1;
+  delete[] tmp_kkpt1;
   delete[] tmp_kpp1;
 
   // undef
   #undef TMP_KKP1
+  #undef TMP_KKPT1
   #undef TMP_KPP1
 }
 
@@ -941,6 +992,8 @@ NozomiEvalDetail NozomiEval::ComputeEval(const Position& pos, const PsqList& lis
   const Square sq_wk = pos.king_square(kWhite);
   const Square inv_sq_wk = Square::rotate180(pos.king_square(kWhite));
 
+  Color side_to_move = pos.side_to_move();
+
   // KK
   // ・nozomiにはKKは存在しない
   //nozomi_eval_detail.kk_board = kk_nozomi[sq_bk][inv_sq_wk];
@@ -948,6 +1001,8 @@ NozomiEvalDetail NozomiEval::ComputeEval(const Position& pos, const PsqList& lis
   for (const PsqPair* i = list.begin(); i != list.end(); ++i) {
     // KKP
     nozomi_eval_detail.kkp_board += kkp_nozomi[sq_bk][sq_wk][i->black()];
+    // KKPT
+    nozomi_eval_detail.kkp_turn += kkpt_nozomi[sq_bk][sq_wk][i->black()][side_to_move];
 
 // デバッグ用
 #if 0
@@ -978,6 +1033,22 @@ Score NozomiEval::EvaluateMaterial(const Position& pos) {
     for (PieceType pt : Piece::all_hand_types()) {
       score += (c == kBlack ? 1 : -1) * pos.hand(c).count(pt) * PieceValue[pt];
     }
+  }
+
+  return score;
+}
+
+// nozomiのKKPTの全計算
+Score NozomiEval::EvaluateKKPT(const Position& pos, const PsqList& list) {
+  const Square sq_bk = pos.king_square(kBlack);
+  const Square sq_wk = pos.king_square(kWhite);
+
+  Color side_to_move = pos.side_to_move();
+  Score score = kScoreZero;
+
+  for (const PsqPair* i = list.begin(); i != list.end(); ++i) {
+    // KKPT
+    score += kkpt_nozomi[sq_bk][sq_wk][i->black()][side_to_move];
   }
 
   return score;
@@ -1016,12 +1087,16 @@ int32_t NozomiEvalDetail::Sum(const Color side_to_move) const {
   // ・nozomiにはKKは存在しない
   int32_t score_board = kkp_board / NozomiEval::FV_SCALE_KK_KKP + (kpp_board[kBlack] - kpp_board[kWhite]);
 
+  // KKPT
+  // ・KKPの手番だが、合計するときのプラスマイナスはside_to_moveによる。（score_boardと同様。score_turnとは異なる。）
+  int32_t score_kkpt = kkp_turn / NozomiEval::FV_SCALE_KK_KKP;
+
   // 手番
   // ・このバージョンのnozomiでは、手番の評価は固定値80。
   int32_t score_turn  = NozomiEval::kTempo * NozomiEval::FV_SCALE;
 
   // 合計
-  int32_t score_sum = (side_to_move == kBlack ? (material + score_board) : -(material + score_board)) + score_turn;
+  int32_t score_sum = (side_to_move == kBlack ? (material + score_board + score_kkpt) : -(material + score_board + score_kkpt)) + score_turn;
 
   return score_sum;
 }
@@ -1213,6 +1288,7 @@ void NozomiEvalDetail::Print(const Color side_to_move) const {
   std::printf("-----\n");
   std::printf("Material    =%+9.2f\n", NozomiEval::ToCentiPawn(material, side_to_move));
   std::printf("KKP         =%+9.2f\n", NozomiEval::ToCentiPawn((double)(kkp_board) / NozomiEval::FV_SCALE_KK_KKP, side_to_move));
+  std::printf("KKPT        =%+9.2f\n", NozomiEval::ToCentiPawn((double)(kkp_turn) / NozomiEval::FV_SCALE_KK_KKP, side_to_move));
   std::printf("KPP         =%+9.2f\n", NozomiEval::ToCentiPawn(kpp_board[kBlack] - kpp_board[kWhite], side_to_move));
   std::printf("Turn        =%+9.2f\n", NozomiEval::ToCentiPawn((double)NozomiEval::kTempo * NozomiEval::FV_SCALE));
   std::printf("----------\n");

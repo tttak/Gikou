@@ -91,6 +91,7 @@ struct NozomiEvalDetail {
     material += rhs.material;
     //kk_board += rhs.kk_board;
     kkp_board += rhs.kkp_board;
+    kkp_turn += rhs.kkp_turn;
     kpp_board[kBlack] += rhs.kpp_board[kBlack];
     kpp_board[kWhite] += rhs.kpp_board[kWhite];
 
@@ -101,6 +102,7 @@ struct NozomiEvalDetail {
     material -= rhs.material;
     //kk_board -= rhs.kk_board;
     kkp_board -= rhs.kkp_board;
+    kkp_turn -= rhs.kkp_turn;
     kpp_board[kBlack] -= rhs.kpp_board[kBlack];
     kpp_board[kWhite] -= rhs.kpp_board[kWhite];
 
@@ -127,8 +129,9 @@ struct NozomiEvalDetail {
   // ・nozomiにはKKは存在しない
   //int32_t kk_board;
 
-  /** KKP（King-King-Piece）に関する評価値（駒の位置のみ、手番なし）. */
+  /** KKP（King-King-Piece）に関する評価値（駒の位置、手番）. */
   int32_t kkp_board;
+  int32_t kkp_turn;
 
   /** KPP（King-Piece-Piece）に関する評価値（駒の位置のみ、手番なし。配列は先手玉と後手玉）. */
   int32_t kpp_board[2];
@@ -371,6 +374,14 @@ namespace NozomiEval {
    * @return 駒割りの評価値
    */
   Score EvaluateMaterial(const Position& pos);
+
+  /**
+   * KKPTの評価値を全計算します.
+   * @param pos      評価値を計算したい局面
+   * @param psq_list 駒の位置のインデックスのリスト
+   * @return KKPTの評価値
+   */
+  Score EvaluateKKPT(const Position& pos, const PsqList& list);
 
   /**
    * 駒割りを差分計算します.
