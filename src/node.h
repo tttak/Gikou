@@ -161,6 +161,18 @@ class Node : public Position {
    */
   void UnmakeNullMove();
 
+
+  // ----- 各々のソフトの最終的な評価値
+
+  /** 技巧の評価値（最終的な計算結果）. */
+  Score final_score_gikou;
+
+  /** nozomiの評価値（最終的な計算結果）. */
+  Score final_score_nozomi;
+
+  // -----
+
+
  private:
 
   struct Stack {

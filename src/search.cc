@@ -53,6 +53,17 @@ Array<uint64_t, 64> g_cuts_by_move;
 
 Array<int16_t, 2, 2, 64, 64> g_reductions; // [pv][improving][depth][moveNumber]
 
+// デバッグ用
+#if 0
+uint64_t g_cnt_1 = 0;
+uint64_t g_cnt_2 = 0;
+uint64_t g_cnt_3 = 0;
+uint64_t g_cnt_4 = 0;
+uint64_t g_cnt_5 = 0;
+uint64_t g_cnt_6 = 0;
+#endif
+
+
 const Array<std::vector<int>, 20> g_half_density = {
     {0, 1},
     {1, 0},
@@ -168,6 +179,11 @@ void Search::PrepareForNextSearch() {
   countermoves_.Clear();
   followupmoves_.Clear();
   gains_.Clear();
+
+  // 各々のソフトの評価値のGainsStats
+  gains_gikou_.Clear();
+  gains_nozomi_.Clear();
+
 
   // マスタースレッドの場合は、スレッド間で共有する置換表の世代を更新する
   if (is_master_thread()) {
@@ -489,10 +505,20 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   eval = node.Evaluate(); // 差分計算を行うため、常に評価関数を呼ぶ
   if (in_check) {
     ss->static_score = kScoreNone;
+
+    // 各々のソフトの最終的な評価値
+    ss->static_score_gikou = kScoreNone;
+    ss->static_score_nozomi = kScoreNone;
+
     goto moves_loop;
   } else if (entry != nullptr) {
     // 静的評価値を保存しておく
     ss->static_score = eval;
+
+    // 各々のソフトの最終的な評価値
+    ss->static_score_gikou = node.final_score_gikou;
+    ss->static_score_nozomi = node.final_score_nozomi;
+
     // 静的評価値よりも、hash scoreが信頼できる場合は、静的評価値をhash scoreで置き換える
     if (hash_score != kScoreNone) {
       if (entry->bound() & (hash_score > eval ? kBoundLower : kBoundUpper)) {
@@ -501,6 +527,11 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
     }
   } else {
     ss->static_score = eval;
+
+    // 各々のソフトの最終的な評価値
+    ss->static_score_gikou = node.final_score_gikou;
+    ss->static_score_nozomi = node.final_score_nozomi;
+
     shared_.hash_table.Save(pos_key, kMoveNone, kScoreNone, kDepthNone, kBoundNone,
                             ss->static_score, false);
   }
@@ -512,6 +543,31 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
       && (ss-1)->current_move.is_quiet()) {
     Score gain = -(ss-1)->static_score - ss->static_score;
     gains_.Update((ss-1)->current_move, gain);
+
+    // 各々のソフトの評価値のGainsStats
+    gains_gikou_.Update((ss-1)->current_move, -(ss-1)->static_score_gikou - ss->static_score_gikou);
+    gains_nozomi_.Update((ss-1)->current_move, -(ss-1)->static_score_nozomi - ss->static_score_nozomi);
+
+// デバッグ用
+#if 0
+    std::printf("-----\n");
+
+    std::printf("(ss-1)->current_move=%s\n", (ss-1)->current_move.ToSfen().c_str());
+
+    std::printf("(ss-1)->static_score_gikou=%+6d\n", (ss-1)->static_score_gikou);
+    std::printf("ss    ->static_score_gikou=%+6d\n", ss    ->static_score_gikou);
+    std::printf("gain_gikou                =%+6d\n", -(ss-1)->static_score_gikou - ss->static_score_gikou);
+
+    std::printf("(ss-1)->static_score_nozomi=%+6d\n", (ss-1)->static_score_nozomi);
+    std::printf("ss    ->static_score_nozomi=%+6d\n", ss    ->static_score_nozomi);
+    std::printf("gain_nozomi                =%+6d\n", -(ss-1)->static_score_nozomi - ss->static_score_nozomi);
+
+    std::printf("(ss-1)->static_score=%+6d\n", (ss-1)->static_score);
+    std::printf("ss    ->static_score=%+6d\n", ss    ->static_score);
+    std::printf("gain                =%+6d\n", gain);
+
+#endif
+
   }
 
   // Razoring（王手がかかっている場合は、スキップされる）
@@ -730,13 +786,73 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
      /* && move != ttMove Already implicit in the next condition */
         && best_score > kScoreMatedInMaxPly) {
 
-      // Move count based pruning
+// デバッグ用
+#if 0
       if (   depth < 16 * kOnePly
           && move_count >= futility_move_count(kIsPv, depth)
-          && gains_[move] < kScoreZero
+          && history_.HasNegativeScore(move)) {
+
+        //std::printf("gains_      [%s] =%+6d\n", move.ToSfen().c_str(), gains_      [move]);
+        //std::printf("gains_gikou_[%s] =%+6d\n", move.ToSfen().c_str(), gains_gikou_[move]);
+        //std::printf("gains_nozomi_[%s] =%+6d\n", move.ToSfen().c_str(), gains_nozomi_[move]);
+
+        g_cnt_1++;
+
+        if (gains_[move] < kScoreZero) {
+          g_cnt_2++;
+        }
+
+        if (gains_gikou_[move] < kScoreZero
+         && gains_nozomi_[move] < kScoreZero) {
+          g_cnt_3++;
+        }
+
+        if (gains_[move] < kScoreZero
+         && gains_gikou_[move] < kScoreZero
+         && gains_nozomi_[move] < kScoreZero) {
+          g_cnt_4++;
+        }
+
+        // ----- 追加調査
+        if (gains_gikou_[move] > 0 && gains_nozomi_[move] <= 0) {
+          g_cnt_5++;
+
+          std::printf("----- gains_gikou_[move] > 0 && gains_nozomi_[move] <= 0\n");
+          std::printf("gains_      [%s] =%+6d\n", move.ToSfen().c_str(), gains_      [move]);
+          std::printf("gains_gikou_[%s] =%+6d\n", move.ToSfen().c_str(), gains_gikou_[move]);
+          std::printf("gains_nozomi_[%s] =%+6d\n", move.ToSfen().c_str(), gains_nozomi_[move]);
+        }
+
+        if (gains_nozomi_[move] > 0 && gains_gikou_[move] <= 0) {
+          g_cnt_6++;
+
+          std::printf("----- gains_nozomi_[move] > 0 && gains_gikou_[move] <= 0\n");
+          std::printf("gains_      [%s] =%+6d\n", move.ToSfen().c_str(), gains_      [move]);
+          std::printf("gains_gikou_[%s] =%+6d\n", move.ToSfen().c_str(), gains_gikou_[move]);
+          std::printf("gains_nozomi_[%s] =%+6d\n", move.ToSfen().c_str(), gains_nozomi_[move]);
+        }
+        // -----
+
+      }
+#endif
+
+      // Move count based pruning
+      // 各々のソフトの評価値のGainsStatsを使用する
+      //if (   depth < 16 * kOnePly
+      //    && move_count >= futility_move_count(kIsPv, depth)
+      //    && gains_[move] < kScoreZero
+      //    && history_.HasNegativeScore(move)) {
+      //  continue;
+      //}
+      if (   depth < 16 * kOnePly
+          && move_count >= futility_move_count(kIsPv, depth)
+        //&& gains_[move] < kScoreZero
+          && gains_gikou_[move] < kScoreZero
+          && gains_nozomi_[move] < kScoreZero
           && history_.HasNegativeScore(move)) {
         continue;
       }
+
 
       Depth r = reduction<kIsPv>(improving, depth, move_count);
       Depth predicted_depth = new_depth - r;
@@ -1258,4 +1374,16 @@ void Search::SendUsiInfo(const Node& node, int depth, int64_t time,
 
   // infoコマンドをまとめて標準出力へ出力する
   SYNCED_PRINTF("%s", buf.c_str());
+
+
+// デバッグ用
+#if 0
+   std::printf("g_cnt_1=%d\n", g_cnt_1);
+   std::printf("g_cnt_2=%d\n", g_cnt_2);
+   std::printf("g_cnt_3=%d\n", g_cnt_3);
+   std::printf("g_cnt_4=%d\n", g_cnt_4);
+   std::printf("g_cnt_5=%d\n", g_cnt_5);
+   std::printf("g_cnt_6=%d\n", g_cnt_6);
+#endif
+
 }

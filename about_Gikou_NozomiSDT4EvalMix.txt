@@ -84,3 +84,10 @@
   Turn        =   +93.02　　　 ←nozomiの手番（固定値部分）
   ----------
 
+
+■Gikou_NozomiSDT4EvalMix_BothGains_20161020
+「Gikou_NozomiSDT4EvalMix_20161018」からの変更点
+　・試験的に、技巧とnozomiの各々の評価値のGainsStatsを追加し、枝刈り（Move count based pruning）で使用する。
+　・両方のGainsStatsが負の場合にのみ、枝刈りするように変更。（枝刈りの条件を少し厳しくした）
+　・元々のGainsStatsは指し手の実現確率の算出で使用されているので、そのままにしておく。
+
