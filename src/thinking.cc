@@ -39,6 +39,13 @@ int g_ChangeEvalProgress;
 // 使用する評価関数の種類
 EvalKind g_EvalKind;
 
+// 前回使用した評価関数の種類
+// ・「-1」（使用する評価関数（技巧・Apery）を1手ごとに切り替えるモード）の場合にのみ使用する
+EvalKind g_prev_EvalKind;
+
+// ストップフラグ
+bool g_stop_flg = false;
+
 namespace {
 
 const char* kBookFile = "book.bin";
@@ -68,6 +75,8 @@ void Thinking::Initialize() {
     g_EvalKind = kApery;
   }
 
+  // 前回使用した評価関数の種類の初期値
+  g_prev_EvalKind = g_EvalKind;
 }
 
 void Thinking::StartNewGame() {
@@ -126,29 +135,26 @@ void Thinking::StartThinking(const Node& root_node,
     // ----- 進行度を算出し、使用する評価関数を決める
     double progress = Progress::EstimateProgress(node);
 
+    // 退避
     EvalKind old_EvalKind = g_EvalKind;
 
     // 「-1」の場合、技巧とAperyで1手ごとに交代する（特殊なモード）
     if (g_ChangeEvalProgress == -1) {
-      // どちらでもない場合、技巧にしておく（念のため）
-      if (g_EvalKind != kGikou && g_EvalKind != kApery) {
-        g_EvalKind = kGikou;
+      // 「go」の場合でも「go ponder」の場合でも処理は同じ
+
+      // 前回使用した評価関数の種類が技巧の場合
+      if (g_prev_EvalKind == kGikou) {
+        // 今回はApery
+        g_EvalKind = kApery;
       }
-      // 通常の場合
+      // その他の場合
       else {
-        // ponderの場合は何もしない
-        if (!go_options.ponder) {
-          // 1手ごとに交代する
-          if (g_EvalKind == kGikou) {
-            g_EvalKind = kApery;
-          } else {
-            g_EvalKind = kGikou;
-          }
-        }
+        // 今回は技巧
+        g_EvalKind = kGikou;
       }
     }
 
-    // 通常の場合
+    // 通常の場合（「-1」以外の場合）
     else {
       // 序盤はApery
       if (progress * 100 < g_ChangeEvalProgress) {
@@ -223,9 +229,22 @@ send_best_move:
     // d. 最善手のみを送る
     SYNCED_PRINTF("bestmove %s\n", best_move.ToSfen().c_str());
   }
+
+
+  // ストップフラグがfalseの場合（≒stopコマンドではない場合）
+  if (!g_stop_flg) {
+    // 前回使用した評価関数の種類を更新
+    g_prev_EvalKind = g_EvalKind;
+  }
+
+  // ストップフラグをfalseに戻す
+  g_stop_flg = false;
 }
 
 void Thinking::StopThinking() {
+  // ストップフラグをセット
+  g_stop_flg = true;
+
   mutex_.lock();
   shared_data_.signals.stop = true;
   mutex_.unlock();
