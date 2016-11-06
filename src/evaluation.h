@@ -68,6 +68,9 @@ typedef Pack<int32_t, 4> PackedScore;
 
 /**
  * Aperyの評価値の詳細を保存するためのクラスです.
+ * ・試験的にKPPの手番の評価をなくしたバージョン。
+ * ・KKとKKPは手番評価あり。
+ * ・KPPTではなくKKPT。
  */
 struct AperyEvalDetail {
 
@@ -94,9 +97,9 @@ struct AperyEvalDetail {
     kkp_board += rhs.kkp_board;
     kkp_turn += rhs.kkp_turn;
     kpp_board[kBlack] += rhs.kpp_board[kBlack];
-    kpp_turn [kBlack] += rhs.kpp_turn [kBlack];
+    //kpp_turn [kBlack] += rhs.kpp_turn [kBlack];
     kpp_board[kWhite] += rhs.kpp_board[kWhite];
-    kpp_turn [kWhite] += rhs.kpp_turn [kWhite];
+    //kpp_turn [kWhite] += rhs.kpp_turn [kWhite];
 
     return *this;
   }
@@ -108,9 +111,9 @@ struct AperyEvalDetail {
     kkp_board -= rhs.kkp_board;
     kkp_turn -= rhs.kkp_turn;
     kpp_board[kBlack] -= rhs.kpp_board[kBlack];
-    kpp_turn [kBlack] -= rhs.kpp_turn [kBlack];
+    //kpp_turn [kBlack] -= rhs.kpp_turn [kBlack];
     kpp_board[kWhite] -= rhs.kpp_board[kWhite];
-    kpp_turn [kWhite] -= rhs.kpp_turn [kWhite];
+    //kpp_turn [kWhite] -= rhs.kpp_turn [kWhite];
 
     return *this;
   }
@@ -141,7 +144,7 @@ struct AperyEvalDetail {
 
   /** KPP（King-Piece-Piece）に関する評価値（駒の位置、手番）. */
   int32_t kpp_board[2];
-  int32_t kpp_turn [2];
+  //int32_t kpp_turn [2];
 };
 
 /**

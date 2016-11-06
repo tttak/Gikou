@@ -93,3 +93,12 @@
 　　 今回の変更で3次元配列[81][2110][2110]として保持することになったため、メモリ使用量が増えました。
 　　 （技巧の評価関数では「と～成銀」を「金」と区別しているため、PsqIndexの数がAperyより多くなっています。）
 
+
+■Gikou_AperyEvalMixKKPT_20161106
+「Gikou_AperyEvalMix_20160905」からの変更点
+　・Aperyの評価値について、試験的にKPPのみ手番の評価をなくしたバージョン。
+　　KKとKKPは手番評価あり。KPPTではなくKKPT。
+　・Aperyの評価関数バイナリ（KK_synthesized.bin、KKP_synthesized.bin、KPP_synthesized.bin）を読み込むが、
+　　KPPでは「駒の位置」の部分のみ使用し、「手番」の部分は使用しない。
+　・技巧の評価値はオリジナルのまま。手番の評価を含む。
+
