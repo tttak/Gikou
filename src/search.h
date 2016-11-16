@@ -64,6 +64,9 @@ class Search {
     // Stockfish7対応
     CounterMoveStats* counterMoves;
     int moveCount;
+
+    // 進行度
+    double progress;
   };
 
   static void Init();

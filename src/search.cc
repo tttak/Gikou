@@ -160,8 +160,11 @@ void Search::Init() {
 
   // Stockfish7対応
   for (int d = 0; d < 16; ++d) {
+    // TODO 読み太1.7を参考に
     FutilityMoveCounts[0][d] = int(2.4 + 0.773 * pow(d + 0.00, 1.8));
     FutilityMoveCounts[1][d] = int(2.9 + 1.045 * pow(d + 0.49, 1.8));
+    //FutilityMoveCounts[0][d] = int(12.4 + 0.773 * pow(d + 0.00, 1.8));
+    //FutilityMoveCounts[1][d] = int(12.9 + 1.045 * pow(d + 0.49, 1.8));
   }
 
 }
@@ -470,7 +473,7 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
     if (shared_.signals.stop) {
       return kScoreDraw;
     } else if (ply >= kMaxPly) {
-      return !in_check ? node.Evaluate() : kScoreDraw;
+      return !in_check ? node.Evaluate(&ss->progress) : kScoreDraw;
     }
 
     // 千日手等を検出する
@@ -526,7 +529,7 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   }
 
   // 評価関数を呼ぶ
-  eval = node.Evaluate(); // 差分計算を行うため、常に評価関数を呼ぶ
+  eval = node.Evaluate(&ss->progress); // 差分計算を行うため、常に評価関数を呼ぶ
   if (in_check) {
     ss->static_score = kScoreNone;
     goto moves_loop;
@@ -790,12 +793,23 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
         && best_score > kScoreMatedInMaxPly) {
 
       // Move count based pruning
+      // TODO Stockfish7対応
+#if 1
       if (   depth < 16 * kOnePly
           && move_count >= futility_move_count(kIsPv, depth)
           && gains_[move] < kScoreZero
           && history_.HasNegativeScore(move)) {
         continue;
       }
+#endif
+
+#if 0
+      if (   moveCountPruning
+          && gains_[move] < kScoreZero
+          && history_.HasNegativeScore(move)) {
+        continue;
+      }
+#endif
 
       Depth r = reduction<kIsPv>(improving, depth, move_count);
       Depth predicted_depth = new_depth - r;
@@ -1058,7 +1072,7 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
 
   // 最大手数に到達したら、探索を打ち切る
   if (ply >= kMaxPly) {
-    return !kInCheck ? node.Evaluate() : kScoreDraw;
+    return !kInCheck ? node.Evaluate(&ss->progress) : kScoreDraw;
   }
 
   // 千日手等を検出する
@@ -1098,6 +1112,10 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
   if (kInCheck) {
     node.Evaluate(&progress); // 差分計算を行うため、常に評価関数を呼ぶ
     ss->static_score = kScoreNone;
+
+    // 進行度
+    ss->progress = progress;
+
   } else {
     // １手詰関数を呼ぶ
     if (IsMateInOnePly(node, &ss->current_move)) {
@@ -1111,6 +1129,10 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
     if (tte != nullptr) {
       // 静的評価値をセットする
       ss->static_score = best_score = node.Evaluate(&progress);
+
+      // 進行度
+      ss->progress = progress;
+
       // 置換表の得点のほうが、静的評価値よりも信頼できる場合は、静的評価値を置換表の得点で置き換える
       if (!learning_mode_ && hash_score != kScoreNone) {
         if (tte->bound() & (hash_score > best_score ? kBoundLower : kBoundUpper)) {
@@ -1119,6 +1141,9 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
       }
     } else {
       ss->static_score = best_score = node.Evaluate(&progress);
+
+      // 進行度
+      ss->progress = progress;
     }
 
     // stand pat（何も手を指さなくてもβ値を上回る場合は、ここでfail-highする）

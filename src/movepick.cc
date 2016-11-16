@@ -309,6 +309,10 @@ void MovePicker::ScoreMoves<kQuiets>() {
 
   Color c = pos_.side_to_move();
 
+  // 進行度
+  double progress = ss_->progress;
+  //std::printf("progress=%f\n", progress);
+
   for (ExtMove* it = moves_.begin(); it != end_; ++it) {
     Move move = it->move;
     Piece pc = move.piece_after_move();
@@ -316,11 +320,12 @@ void MovePicker::ScoreMoves<kQuiets>() {
 
     //it->score = history_[it->move];
     it->score = history_[move]
-              + sf_history[pc][sq]
-              + (cm ? (*cm)[pc][sq] : kScoreZero)
-              + (fm ? (*fm)[pc][sq] : kScoreZero)
-              + (f2 ? (*f2)[pc][sq] : kScoreZero)
-              + from_to.get(c, move);
+              + (sf_history[pc][sq]
+                  + (cm ? (*cm)[pc][sq] : kScoreZero)
+                  + (fm ? (*fm)[pc][sq] : kScoreZero)
+                  + (f2 ? (*f2)[pc][sq] : kScoreZero)
+                  + from_to.get(c, move)
+                ) * (1 - progress);
   }
 }
 
@@ -331,6 +336,12 @@ void MovePicker::ScoreMoves<kEvasions>() {
   const FromToStats& from_to = *(search_.from_to_);
 
   Color c = pos_.side_to_move();
+
+  // 進行度
+  double progress = 0;
+  if (ss_) {
+    progress = ss_->progress;
+  }
 
   for (ExtMove* it = moves_.begin(); it != end_; ++it) {
     Move move = it->move;
@@ -348,8 +359,9 @@ void MovePicker::ScoreMoves<kEvasions>() {
       // Stockfish7対応
       //it->score = history_[move];
       it->score = history_[move]
-                + sf_history[pc][move.to()]
-                + from_to.get(c, move);
+                + (sf_history[pc][move.to()]
+                    + from_to.get(c, move)
+                  ) * (1 - progress);
     }
   }
 }
