@@ -241,7 +241,7 @@ send_best_move:
   }
 
   // ログ出力
-  SYNCED_PRINTF("info string [END] CurrentProgress=%.2f%%, ChangeEvalProgress=%d%%, EvalKind=%s\n", progress * 100, g_ChangeEvalProgress, get_eval_kind_name(g_EvalKind).c_str());
+  //SYNCED_PRINTF("info string [END] CurrentProgress=%.2f%%, ChangeEvalProgress=%d%%, EvalKind=%s\n", progress * 100, g_ChangeEvalProgress, get_eval_kind_name(g_EvalKind).c_str());
 
   // 6. 最善手を送る
   if (win_declaration_is_possible) {
