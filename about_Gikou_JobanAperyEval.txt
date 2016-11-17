@@ -78,3 +78,8 @@
   KPP         =  +399.38　　　 ←AperyのKPP（King-Piece-Piece）
   ----------
 
+
+■Gikou_JobanAperyEval_20161117
+　・Stockfish7の探索部を取り込み中
+　・MovePickerで進行度を使用
+

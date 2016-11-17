@@ -60,6 +60,13 @@ class Search {
     Depth reduction;
     Score static_score;
     bool skip_null_move;
+
+    // Stockfish7対応
+    CounterMoveStats* counterMoves;
+    int moveCount;
+
+    // 進行度
+    double progress;
   };
 
   static void Init();
@@ -138,8 +145,17 @@ class Search {
 
   void PrepareForNextSearch();
 
+
+  // Stockfish7のStats
+  SfHistoryStats* sf_history_;
+  CounterMoveHistoryStats* counter_move_history_;
+  FromToStats* from_to_;
+
+
  private:
-  static constexpr int kStackSize = kMaxPly + 6;
+  // Stockfish7対応
+  //static constexpr int kStackSize = kMaxPly + 6;
+  static constexpr int kStackSize = kMaxPly + 9;
 
   template<NodeType kNodeType>
   Score QuiecenceSearch(Node& node, Score alpha, Score beta, Depth depth,
@@ -153,19 +169,28 @@ class Search {
   Score QuiecenceSearch(Node& node, Score alpha, Score beta, Depth depth,
                         int ply);
 
+  // Stockfish7対応
+  void UpdateCmStats(Search::Stack* ss, Piece pc, Square sq, int bonus);
+
+  // Stockfish7対応
   void UpdateStats(Search::Stack* ss, Move move, Depth depth, Move* quiets,
-                   int quiets_count);
+                   int quiets_count, int bonus, Node& node);
 
   void SendUsiInfo(const Node& node, int depth, int64_t time, uint64_t nodes,
                    Bound bound = kBoundExact) const;
 
   void ResetSearchStack() {
-    std::memset(stack_.begin(), 0, 5 * sizeof(Stack));
+    // Stockfish7対応
+    //std::memset(stack_.begin(), 0, 5 * sizeof(Stack));
+    std::memset(stack_.begin(), 0, 8 * sizeof(Stack));
   }
 
   Stack* search_stack_at_ply(int ply) {
     assert(0 <= ply && ply <= kMaxPly);
-    return stack_.begin() + 2 + ply; // stack_at_ply(0) - 2 の参照を可能にするため
+
+    // Stockfish7対応
+    //return stack_.begin() + 2 + ply; // stack_at_ply(0) - 2 の参照を可能にするため
+    return stack_.begin() + 5 + ply; // stack_at_ply(0) - 5 の参照を可能にするため
   }
 
   SharedData& shared_;

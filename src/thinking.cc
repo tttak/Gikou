@@ -46,6 +46,16 @@ EvalKind g_prev_EvalKind;
 // ストップフラグ
 bool g_stop_flg = false;
 
+
+// 探索で実現確率を使用する深さの最小値
+extern int g_UseProbabilityMinDepth;
+
+// Stockfish7のStats
+extern SfHistoryStats g_arySfHistory[8];
+extern CounterMoveHistoryStats g_aryCounterMoveHistory[8];
+extern FromToStats g_aryFromTo[8];
+
+
 namespace {
 
 const char* kBookFile = "book.bin";
@@ -77,6 +87,19 @@ void Thinking::Initialize() {
 
   // 前回使用した評価関数の種類の初期値
   g_prev_EvalKind = g_EvalKind;
+
+
+  // 探索で実現確率を使用する深さの最小値
+  g_UseProbabilityMinDepth = usi_options_["Z03_UseProbabilityMinDepth"];
+
+  // Stockfish7のStatsのクリア
+  // TODO とりあえず配列の要素数は8固定。あとでスレッド数に応じて変更できるようにする予定。
+  for (int i = 0; i < 8; i++) {
+    g_arySfHistory[i].clear();
+    g_aryCounterMoveHistory[i].clear();
+    g_aryFromTo[i].clear();
+  }
+
 }
 
 void Thinking::StartNewGame() {
@@ -93,6 +116,9 @@ void Thinking::StartThinking(const Node& root_node,
   Move best_move = kMoveNone;
   Move ponder_move = kMoveNone;
   SimpleMoveList<kAllMoves, true> all_legal_moves(root_node);
+
+  // 進行度
+  double progress = 0;
 
   // 1. 入玉宣言勝ち
   if (root_node.WinDeclarationIsPossible(true)) {
@@ -133,7 +159,7 @@ void Thinking::StartThinking(const Node& root_node,
     thread_manager_.SetNumSearchThreads(usi_options_["Threads"]);
 
     // ----- 進行度を算出し、使用する評価関数を決める
-    double progress = Progress::EstimateProgress(node);
+    progress = Progress::EstimateProgress(node);
 
     // 退避
     EvalKind old_EvalKind = g_EvalKind;
@@ -172,7 +198,8 @@ void Thinking::StartThinking(const Node& root_node,
       node.RefreshCurrentEvalDetail();
     }
 
-    SYNCED_PRINTF("info string CurrentProgress=%.2f%%, ChangeEvalProgress=%d%%, EvalKind=%s\n", progress * 100, g_ChangeEvalProgress, get_eval_kind_name(g_EvalKind).c_str());
+    // ログ出力
+    SYNCED_PRINTF("info string [START] CurrentProgress=%.2f%%, ChangeEvalProgress=%d%%, EvalKind=%s\n", progress * 100, g_ChangeEvalProgress, get_eval_kind_name(g_EvalKind).c_str());
 
     // -----
 
@@ -212,6 +239,9 @@ send_best_move:
       return shared_data_.signals.stop || shared_data_.signals.ponderhit;
     });
   }
+
+  // ログ出力
+  SYNCED_PRINTF("info string [END] CurrentProgress=%.2f%%, ChangeEvalProgress=%d%%, EvalKind=%s\n", progress * 100, g_ChangeEvalProgress, get_eval_kind_name(g_EvalKind).c_str());
 
   // 6. 最善手を送る
   if (win_declaration_is_possible) {
