@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou Stockfish7 20161030";
+const auto kProgramName = "Gikou Stockfish7 20161204";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -333,7 +333,8 @@ UsiOptions::UsiOptions() {
   map_.emplace("OwnBook", UsiOption(true));
 
   // 定跡を用いる最大手数
-  map_.emplace("BookMaxPly", UsiOption(50, 0, 50));
+  //map_.emplace("BookMaxPly", UsiOption(50, 0, 50));
+  map_.emplace("BookMaxPly", UsiOption(70, 0, 120));
 
   // 定跡手の評価値のしきい値（先手番）（先手番側から見た評価値がこの値未満の定跡手は選択しない）
   map_.emplace("MinBookScoreForBlack", UsiOption(0, -500, 500));
