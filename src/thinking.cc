@@ -73,6 +73,9 @@ void Thinking::StartNewGame() {
 
 void Thinking::ResetSignals() {
   shared_data_.signals.Reset();
+
+  // 「go ponder」の直後に「ponderhit」が来ても大丈夫なように修正
+  time_manager_.set_ponderhit(false);
 }
 
 void Thinking::StartThinking(const Node& root_node,

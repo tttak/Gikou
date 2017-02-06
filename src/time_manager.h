@@ -92,6 +92,13 @@ class TimeManager : public TaskThread {
     return time_control_->stats;
   }
 
+  /**
+   * ponderhitをセットします.
+   */
+  void set_ponderhit(bool ponderhit) {
+    ponderhit_ = ponderhit;
+  }
+
  private:
   void Run();
   const UsiOptions& usi_options_;
