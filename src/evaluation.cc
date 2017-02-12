@@ -27,7 +27,89 @@
 
 std::unique_ptr<EvalParameters> g_eval_params(new EvalParameters);
 
-Score EvalDetail::ComputeFinalScore(Color side_to_move,
+// ----- 評価値の割合（序盤、終盤）（単位は%）
+
+// 評価値の割合【KP】（序盤、終盤）（単位は%）
+extern int g_EvalKPJoban;
+extern int g_EvalKPShuban;
+
+// 評価値の割合【PP】（序盤、終盤）（単位は%）
+extern int g_EvalPPJoban;
+extern int g_EvalPPShuban;
+
+// 評価値の割合【利き（各マスの利き）】（序盤、終盤）（単位は%）
+extern int g_EvalControlsJoban;
+extern int g_EvalControlsShuban;
+
+// 評価値の割合【玉の安全度】（序盤、終盤）（単位は%）
+extern int g_EvalKingSafetyJoban;
+extern int g_EvalKingSafetyShuban;
+
+// 評価値の割合【飛び駒（飛車・角・香車の利き）】（序盤、終盤）（単位は%）
+extern int g_EvalSlidersJoban;
+extern int g_EvalSlidersShuban;
+
+// -----
+
+/**
+ * KPの評価値を計算します.
+ * @param kp_total KPのPackedScore
+ * @param progress 進行度
+ * @param side_to_move 手番
+ * @return KPの評価値
+ */
+int64_t ComputeEvalKp(PackedScore kp_total, int64_t progress, Color side_to_move) {
+  constexpr int64_t kScale = Progress::kWeightScale;
+  int64_t sum = 0;
+  int64_t tempo;
+
+  if (progress < (kScale / 2)) {
+    int64_t opening     = -2 * progress + 1 * kScale;
+    int64_t middle_game = +2 * progress             ;
+    sum += (opening * kp_total[0]) + (middle_game * kp_total[1]);
+    tempo = (opening * g_eval_params->tempo[0]) + (middle_game * g_eval_params->tempo[1]);
+  } else {
+    int64_t middle_game = -2 * progress + 2 * kScale;
+    int64_t end_game    = +2 * progress - 1 * kScale;
+    sum += (middle_game * kp_total[1]) + (end_game * kp_total[2]);
+    tempo = (middle_game * g_eval_params->tempo[1]) + (end_game * g_eval_params->tempo[2]);
+  }
+
+  if (side_to_move == kBlack) {
+    sum += tempo / 2;
+  } else {
+    sum -= tempo / 2;
+  }
+
+  return sum;
+}
+
+/**
+ * KP以外の評価値を計算します.
+ * @param others KP以外のPackedScore
+ * @param progress 進行度
+ * @param side_to_move 手番
+ * @return KP以外の評価値
+ */
+int64_t ComputeEvalOthers(PackedScore others, int64_t progress, Color side_to_move) {
+  constexpr int64_t kScale = Progress::kWeightScale;
+  int64_t sum = 0;
+
+  if (side_to_move == kBlack) {
+    int64_t opening  = (kScale - progress) * (others[0] + others[1] / 10);
+    int64_t end_game = (progress         ) * (others[2] + others[3] / 10);
+    sum += (opening + end_game);
+  } else {
+    int64_t opening  = (kScale - progress) * (others[0] - others[1] / 10);
+    int64_t end_game = (progress         ) * (others[2] - others[3] / 10);
+    sum += (opening + end_game);
+  }
+
+  return sum;
+}
+
+// 修正前のメソッド
+Score EvalDetail::ComputeFinalScore_org(Color side_to_move,
                                     double* const progress_output) const {
 
   PackedScore kp_total = kp[kBlack] + kp[kWhite];
@@ -80,6 +162,71 @@ Score EvalDetail::ComputeFinalScore(Color side_to_move,
   // 4. 小数点以下を切り捨てる
   int64_t score = sum / (kScale * static_cast<int64_t>(kFvScale));
   assert(-kScoreMaxEval <= score && score <= kScoreMaxEval);
+
+  // 5. 後手番の場合は、得点を反転させる（常に手番側から見た点数になるようにする）
+  return static_cast<Score>(side_to_move == kBlack ? score : -score);
+}
+
+
+// 修正後のメソッド
+Score EvalDetail::ComputeFinalScore(Color side_to_move,
+                                    double* const progress_output) const {
+  // KPの合計
+  PackedScore kp_total = kp[kBlack] + kp[kWhite];
+
+  // 1. 進行度を求める
+  // 計算を高速化するため、進行度は整数型を使い、固定小数点で表す。
+  constexpr int64_t kScale = Progress::kWeightScale;
+  double weight = static_cast<double>(kp_total[3]);
+  double progress_double = math::sigmoid(weight * double(1.0 / kScale));
+  int64_t progress = static_cast<int64_t>(progress_double * kScale);
+  if (progress_output != nullptr) {
+    *progress_output = progress_double;
+  }
+
+  // 評価値の算出（KP、PP、利き（各マスの利き）、玉の安全度、飛び駒（飛車・角・香車の利き））
+  int64_t value_kp          = ComputeEvalKp    (kp_total   , progress, side_to_move);
+  int64_t value_pp          = ComputeEvalOthers(two_pieces , progress, side_to_move);
+  int64_t value_controls    = ComputeEvalOthers(controls   , progress, side_to_move);
+  int64_t value_king_safety = ComputeEvalOthers(king_safety, progress, side_to_move);
+  int64_t value_sliders     = ComputeEvalOthers(sliders    , progress, side_to_move);
+
+  // 評価値の割合（序盤、終盤）（単位は%）
+  double rate_kp          = (g_EvalKPJoban         + (g_EvalKPShuban         - g_EvalKPJoban)         * progress_double) / 100;
+  double rate_pp          = (g_EvalPPJoban         + (g_EvalPPShuban         - g_EvalPPJoban)         * progress_double) / 100;
+  double rate_controls    = (g_EvalControlsJoban   + (g_EvalControlsShuban   - g_EvalControlsJoban)   * progress_double) / 100;
+  double rate_king_safety = (g_EvalKingSafetyJoban + (g_EvalKingSafetyShuban - g_EvalKingSafetyJoban) * progress_double) / 100;
+  double rate_sliders     = (g_EvalSlidersJoban    + (g_EvalSlidersShuban    - g_EvalSlidersJoban)    * progress_double) / 100;
+
+  // 評価値の算出
+  int64_t sum = value_kp          * rate_kp
+              + value_pp          * rate_pp
+              + value_controls    * rate_controls
+              + value_king_safety * rate_king_safety
+              + value_sliders     * rate_sliders
+              ;
+
+  // 4. 小数点以下を切り捨てる
+  int64_t score = sum / (kScale * static_cast<int64_t>(kFvScale));
+  assert(-kScoreMaxEval <= score && score <= kScoreMaxEval);
+
+#if 0
+  Score score_af = static_cast<Score>(side_to_move == kBlack ? score : -score);
+  Score score_bf = ComputeFinalScore_org(side_to_move, progress_output);
+
+  if (score_af != score_bf) {
+    std::printf("score_af != score_bf\n");
+    std::printf("score_af = %d\n", score_af);
+    std::printf("score_bf = %d\n", score_bf);
+
+    std::printf("progress_double  = %f\n", progress_double);
+    std::printf("rate_kp          = %f\n", rate_kp);
+    std::printf("rate_pp          = %f\n", rate_pp);
+    std::printf("rate_controls    = %f\n", rate_controls);
+    std::printf("rate_king_safety = %f\n", rate_king_safety);
+    std::printf("rate_sliders     = %f\n", rate_sliders);
+  }
+#endif
 
   // 5. 後手番の場合は、得点を反転させる（常に手番側から見た点数になるようにする）
   return static_cast<Score>(side_to_move == kBlack ? score : -score);

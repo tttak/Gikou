@@ -37,6 +37,29 @@ extern SfHistoryStats g_arySfHistory[8];
 extern CounterMoveHistoryStats g_aryCounterMoveHistory[8];
 extern FromToStats g_aryFromTo[8];
 
+// ----- 評価値の割合（序盤、終盤）（単位は%）
+
+// 評価値の割合【KP】（序盤、終盤）（単位は%）
+int g_EvalKPJoban;
+int g_EvalKPShuban;
+
+// 評価値の割合【PP】（序盤、終盤）（単位は%）
+int g_EvalPPJoban;
+int g_EvalPPShuban;
+
+// 評価値の割合【利き（各マスの利き）】（序盤、終盤）（単位は%）
+int g_EvalControlsJoban;
+int g_EvalControlsShuban;
+
+// 評価値の割合【玉の安全度】（序盤、終盤）（単位は%）
+int g_EvalKingSafetyJoban;
+int g_EvalKingSafetyShuban;
+
+// 評価値の割合【飛び駒（飛車・角・香車の利き）】（序盤、終盤）（単位は%）
+int g_EvalSlidersJoban;
+int g_EvalSlidersShuban;
+
+// -----
 
 namespace {
 
@@ -65,6 +88,29 @@ void Thinking::Initialize() {
     g_aryFromTo[i].clear();
   }
 
+  // ----- 評価値の割合（序盤、終盤）（単位は%）
+
+  // 評価値の割合【KP】（序盤、終盤）（単位は%）
+  g_EvalKPJoban  = usi_options_["Z1A_EvalKPJoban"];
+  g_EvalKPShuban = usi_options_["Z1B_EvalKPShuban"];
+
+  // 評価値の割合【PP】（序盤、終盤）（単位は%）
+  g_EvalPPJoban  = usi_options_["Z2A_EvalPPJoban"];
+  g_EvalPPShuban = usi_options_["Z2B_EvalPPShuban"];
+
+  // 評価値の割合【利き（各マスの利き）】（序盤、終盤）（単位は%）
+  g_EvalControlsJoban  = usi_options_["Z3A_EvalControlsJoban"];
+  g_EvalControlsShuban = usi_options_["Z3B_EvalControlsShuban"];
+
+  // 評価値の割合【玉の安全度】（序盤、終盤）（単位は%）
+  g_EvalKingSafetyJoban  = usi_options_["Z4A_EvalKingSafetyJoban"];
+  g_EvalKingSafetyShuban = usi_options_["Z4B_EvalKingSafetyShuban"];
+
+  // 評価値の割合【飛び駒（飛車・角・香車の利き）】（序盤、終盤）（単位は%）
+  g_EvalSlidersJoban  = usi_options_["Z5A_EvalSlidersJoban"];
+  g_EvalSlidersShuban = usi_options_["Z5B_EvalSlidersShuban"];
+
+  // -----
 }
 
 void Thinking::StartNewGame() {

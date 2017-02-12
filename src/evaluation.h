@@ -107,6 +107,10 @@ struct EvalDetail {
    */
   Score ComputeFinalScore(Color side_to_move, double* progress_output = nullptr) const;
 
+  // 修正前のメソッド
+  Score ComputeFinalScore_org(Color side_to_move, double* progress_output = nullptr) const;
+
+
   /** KP（King-Piece）に関する評価値. */
   ArrayMap<PackedScore, Color> kp{PackedScore(0), PackedScore(0)};
 

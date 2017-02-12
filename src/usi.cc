@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou Stockfish7 20170206";
+const auto kProgramName = "Gikou Stockfish7 20170212 EvalParams";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -350,6 +350,30 @@ UsiOptions::UsiOptions() {
 
   // 探索で実現確率を使用する深さの最小値
   map_.emplace("Z01_UseProbabilityMinDepth" , UsiOption(8, 0, 100));
+
+  // ----- 評価値の割合（序盤、終盤）（単位は%）
+
+  // 評価値の割合【KP】（序盤、終盤）（単位は%）
+  map_.emplace("Z1A_EvalKPJoban" , UsiOption(100, 0, 1000));
+  map_.emplace("Z1B_EvalKPShuban", UsiOption(100, 0, 1000));
+
+  // 評価値の割合【PP】（序盤、終盤）（単位は%）
+  map_.emplace("Z2A_EvalPPJoban" , UsiOption(100, 0, 1000));
+  map_.emplace("Z2B_EvalPPShuban", UsiOption(100, 0, 1000));
+
+  // 評価値の割合【利き（各マスの利き）】（序盤、終盤）（単位は%）
+  map_.emplace("Z3A_EvalControlsJoban" , UsiOption(100, 0, 1000));
+  map_.emplace("Z3B_EvalControlsShuban", UsiOption(100, 0, 1000));
+
+  // 評価値の割合【玉の安全度】（序盤、終盤）（単位は%）
+  map_.emplace("Z4A_EvalKingSafetyJoban" , UsiOption(100, 0, 1000));
+  map_.emplace("Z4B_EvalKingSafetyShuban", UsiOption(100, 0, 1000));
+
+  // 評価値の割合【飛び駒（飛車・角・香車の利き）】（序盤、終盤）（単位は%）
+  map_.emplace("Z5A_EvalSlidersJoban" , UsiOption(100, 0, 1000));
+  map_.emplace("Z5B_EvalSlidersShuban", UsiOption(100, 0, 1000));
+
+  // -----
 }
 
 void UsiOptions::PrintListOfOptions() {
