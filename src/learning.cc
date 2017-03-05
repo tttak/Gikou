@@ -39,7 +39,7 @@
 namespace {
 
 // デバッグ設定
-constexpr bool kVerboseMessage = false; // デバッグメッセージを多めに出力するか否か
+constexpr bool kVerboseMessage = true; // デバッグメッセージを多めに出力するか否か
 
 // 学習の設定
 constexpr int kNumIteration = 10000; // イテレーション数（パラメータを更新する回数）
@@ -129,6 +129,48 @@ void ResetMaterialValues(ParamsType* const params) {
 }
 
 /**
+ * ファイルにExtendedParamsを書き込みます.
+ * @param file_name ファイル名
+ * @param ptr       ExtendedParamsBaseのポインタ
+ * @return 書き込みに成功した場合、true
+ */
+bool WriteExtendedParamsToFile(const char* file_name, std::unique_ptr<ExtendedParamsBase>& ptr) {
+  std::FILE* fp = std::fopen(file_name, "wb");
+  if (fp == nullptr) {
+    std::printf("Failed to open %s.\n", file_name);
+    return false;
+  }
+
+  std::fwrite(ptr.get(), sizeof(ExtendedParamsBase), 1, fp);
+  std::fclose(fp);
+  std::printf("Wrote parameters to %s\n", file_name);
+  return true;
+}
+
+/**
+ * ファイルからExtendedParamsを読み込みます.
+ * @param file_name ファイル名
+ * @param ptr       ExtendedParamsBaseのポインタ
+ * @return 読み込みに成功した場合、true
+ */
+bool ReadExtendedParamsFromFile(const char* file_name, std::unique_ptr<ExtendedParamsBase>& ptr) {
+  std::FILE* fp = std::fopen(file_name, "rb");
+  if (fp == nullptr) {
+    std::printf("Failed to open %s.\n", file_name);
+    return false;
+  }
+
+  if (std::fread(ptr.get(), sizeof(ExtendedParamsBase), 1, fp) != 1) {
+    std::printf("Failed to read %s.\n", file_name);
+    std::fclose(fp);
+    return false;
+  }
+  std::fclose(fp);
+  std::printf("Read parameters from %s\n", file_name);
+  return true;
+}
+
+/**
  * 棋譜DBから棋譜を読み込みます.
  * @param num_games DBから読み込む棋譜の数
  * @param begin     何番目以降の棋譜を読み込むか
@@ -139,7 +181,7 @@ std::vector<Game> ExtractGamesFromDatabase(const size_t num_games,
   // 1. データベースを準備する
   std::ifstream db_file(GameDatabase::kDefaultDatabaseFile);
   GameDatabase game_db(db_file);
-  game_db.set_title_matches_only(true);
+  game_db.set_title_matches_only(false);
 
   // 2. 必要な数だけ、棋譜を抽出する
   std::vector<Game> games;
@@ -849,11 +891,34 @@ void Learning::LearnEvaluationParameters() {
   std::unique_ptr<ExtendedParams> accumulated_params(new ExtendedParams);
   std::vector<Gradient> thread_local_gradient(num_threads);
   std::vector<SharedData> shared_data(num_threads);
+
+  // ----- 前回学習した際の状態を復元する
+  //g_eval_params->Clear();
+  //accumulated_gradient->Clear();
+  //current_params->Clear();
+  //accumulated_params->Clear();
+  //ResetMaterialValues(current_params.get());
+
   g_eval_params->Clear();
-  accumulated_gradient->Clear();
-  current_params->Clear();
-  accumulated_params->Clear();
-  ResetMaterialValues(current_params.get());
+  Evaluation::ReadParametersFromFile("params.bin");
+  std::printf("Read parameters from params.bin\n");
+
+  if (!ReadExtendedParamsFromFile("accumulated_gradient.bin", accumulated_gradient)) {
+    std::printf("accumulated_gradient->Clear()\n");
+    accumulated_gradient->Clear();
+  }
+  if (!ReadExtendedParamsFromFile("current_params.bin", current_params)) {
+    std::printf("current_params->Clear()\n");
+    current_params->Clear();
+    ResetMaterialValues(current_params.get());
+  }
+  if (!ReadExtendedParamsFromFile("accumulated_params.bin", accumulated_params)) {
+    std::printf("accumulated_params->Clear()\n");
+    accumulated_params->Clear();
+  }
+
+  // -----
+
   CopyParams(current_params);
   for (auto& s : shared_data) {
     s.hash_table.SetSize(64);
@@ -955,7 +1020,11 @@ void Learning::LearnEvaluationParameters() {
       //     Wikipedia: 移動平均, https://ja.wikipedia.org/wiki/移動平均.
       std::unique_ptr<ExtendedParams> average(new ExtendedParams);
       *average = *accumulated_params;
-      double denominator = (1.0 - std::pow(kAveragedSgdDecay, iteration)) / (1.0 - kAveragedSgdDecay);
+
+      // TODO
+      //double denominator = (1.0 - std::pow(kAveragedSgdDecay, iteration)) / (1.0 - kAveragedSgdDecay);
+      double denominator = (1.0 - std::pow(kAveragedSgdDecay, iteration + 1000)) / (1.0 - kAveragedSgdDecay);
+
       Pack<double, 4> reciprocal(1.0 / denominator);
       for (size_t i = 0; i < average->size(); ++i) {
         (*average)[i] *= reciprocal;
@@ -978,6 +1047,20 @@ void Learning::LearnEvaluationParameters() {
       std::fwrite(g_eval_params.get(), sizeof(EvalParameters), 1, fp_params);
       std::fclose(fp_params);
       std::printf("Wrote parameters to params.bin\n");
+
+      // ----- current_params等をファイルに保存する
+
+      if (!WriteExtendedParamsToFile("current_params.bin", current_params)) {
+        break;
+      }
+      if (!WriteExtendedParamsToFile("accumulated_params.bin", accumulated_params)) {
+        break;
+      }
+      if (!WriteExtendedParamsToFile("accumulated_gradient.bin", accumulated_gradient)) {
+        break;
+      }
+
+      // ----- 
 
       // 交差検定を行い、棋譜の手との一致率を計算する
        std::printf("Perform the cross validation...\n");
