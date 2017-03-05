@@ -37,6 +37,13 @@ extern SfHistoryStats g_arySfHistory[8];
 extern CounterMoveHistoryStats g_aryCounterMoveHistory[8];
 extern FromToStats g_aryFromTo[8];
 
+// ----- 評価関数のmix
+
+// 混ぜ合わせる評価関数ファイル
+std::string g_MixGikouEvalFile;
+// 評価値を混ぜる割合（単位は%）
+int g_MixGikouEvalRate;
+
 // ----- 評価値の割合（序盤、終盤）（単位は%）
 
 // 評価値の割合【KP】（序盤、終盤）（単位は%）
@@ -87,6 +94,13 @@ void Thinking::Initialize() {
     g_aryCounterMoveHistory[i].clear();
     g_aryFromTo[i].clear();
   }
+
+  // ----- 評価関数のmix
+
+  // 混ぜ合わせる評価関数ファイル
+  g_MixGikouEvalFile = usi_options_["Z02_MixGikouEvalFile"].str_value();
+  // 評価値を混ぜる割合（単位は%）
+  g_MixGikouEvalRate = usi_options_["Z03_MixGikouEvalRate"];
 
   // ----- 評価値の割合（序盤、終盤）（単位は%）
 

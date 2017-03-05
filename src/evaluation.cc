@@ -27,6 +27,13 @@
 
 std::unique_ptr<EvalParameters> g_eval_params(new EvalParameters);
 
+// ----- 評価関数のmix
+
+// 混ぜ合わせる評価関数ファイル
+extern std::string g_MixGikouEvalFile;
+// 評価値を混ぜる割合（単位は%）
+extern int g_MixGikouEvalRate;
+
 // ----- 評価値の割合（序盤、終盤）（単位は%）
 
 // 評価値の割合【KP】（序盤、終盤）（単位は%）
@@ -768,20 +775,155 @@ EvalDetail Evaluation::EvaluateDifference(const Position& pos,
 }
 
 void Evaluation::Init() {
-  ReadParametersFromFile("params.bin");
+  ReadParametersFromFile("params.bin", g_eval_params);
 }
 
-void Evaluation::ReadParametersFromFile(const char* file_name) {
+bool Evaluation::ReadParametersFromFile(const char* file_name, std::unique_ptr<EvalParameters>& eval_params) {
   // Read parameters from file.
   std::FILE* fp = std::fopen(file_name, "rb");
   if (fp == nullptr) {
     std::printf("info string Failed to open %s.\n", file_name);
-    return;
+    return false;
   }
-  if (std::fread(g_eval_params.get(), sizeof(EvalParameters), 1, fp) != 1) {
+  if (std::fread(eval_params.get(), sizeof(EvalParameters), 1, fp) != 1) {
     std::printf("info string Failed to read %s.\n", file_name);
     std::fclose(fp);
-    return;
+    return false;
   }
   std::fclose(fp);
+  return true;
+}
+
+bool Evaluation::WriteParametersToFile(const char* file_name, std::unique_ptr<EvalParameters>& eval_params) {
+  std::FILE* fp_params = std::fopen(file_name, "wb");
+  if (fp_params == nullptr) {
+    std::printf("Failed to open %s.\n", file_name);
+    return false;
+  }
+  std::fwrite(eval_params.get(), sizeof(EvalParameters), 1, fp_params);
+  std::fclose(fp_params);
+  std::printf("Wrote parameters to %s.\n", file_name);
+  return true;
+}
+
+PackedScore MixPackedScore(PackedScore p1, double r1, PackedScore p2, double r2) {
+  double score[4];
+
+  for (int i = 0; i < 4; ++i) {
+    score[i] = (double)p1[i] * r1 + (double)p2[i] * r2;
+  }
+
+  return PackedScore(static_cast<int32_t>(score[0]),
+                     static_cast<int32_t>(score[1]),
+                     static_cast<int32_t>(score[2]),
+                     static_cast<int32_t>(score[3]));
+}
+
+
+void Evaluation::MixParameters() {
+  std::unique_ptr<EvalParameters> eval_params2(new EvalParameters);
+
+  // 評価関数パラメータの読込み
+  if (!ReadParametersFromFile(g_MixGikouEvalFile.c_str(), eval_params2)) {
+    return;
+  }
+
+  // 評価値を混ぜる割合（単位は%）
+  double mix_rate = (double)g_MixGikouEvalRate / 100;
+  double org_rate = 1 - mix_rate;
+  std::printf("org_rate = %f, mix_rate = %f.\n", org_rate, mix_rate);
+
+  // 1. 駒の価値
+  for (PieceType pt : Piece::all_piece_types()) {
+    g_eval_params->material[pt]
+      = (Score)(  (double)(g_eval_params->material[pt]) * org_rate
+                + (double)(eval_params2 ->material[pt]) * mix_rate);
+  }
+  Material::UpdateTables();
+
+  // 2. KP
+  for (int i = Square::min(); i <= Square::max(); ++i) {
+    Square king_sq(i);
+    for (PsqIndex psq : PsqIndex::all_indices()) {
+      g_eval_params->king_piece[king_sq][psq]
+        = MixPackedScore(g_eval_params->king_piece[king_sq][psq], org_rate
+                       , eval_params2 ->king_piece[king_sq][psq], mix_rate);
+    }
+  }
+
+  // 3. PP
+  for (int i = PsqIndex::min(); i <= PsqIndex::max(); ++i) {
+    PsqIndex psq1(i);
+    for (PsqIndex psq2 : PsqIndex::all_indices()) {
+      g_eval_params->two_pieces[psq1][psq2]
+        = MixPackedScore(g_eval_params->two_pieces[psq1][psq2], org_rate
+                       , eval_params2 ->two_pieces[psq1][psq2], mix_rate);
+    }
+  }
+
+  // 4. 各マスの利き評価
+  for (int i = PsqControlIndex::min(); i <= PsqControlIndex::max(); ++i) {
+    PsqControlIndex index(i);
+    if (index.IsOk()) {
+      for (Square ksq : Square::all_squares()) {
+        for (Color c : {kBlack, kWhite}) {
+          g_eval_params->controls[c][ksq][index]
+            = MixPackedScore(g_eval_params->controls[c][ksq][index], org_rate
+                           , eval_params2 ->controls[c][ksq][index], mix_rate);
+        }
+      }
+    }
+  }
+
+  // 5. 玉の安全度
+  const auto all_pieces_plus_no_piece = Piece::all_pieces().set(kNoPiece);
+  for (unsigned h = HandSet::min(); h <= HandSet::max(); ++h)
+    for (int d = 0; d < 8; ++d)
+      for (Piece piece : all_pieces_plus_no_piece)
+        for (int attacks = 0; attacks < 4; ++attacks)
+          for (int defenses = 0; defenses < 4; ++defenses) {
+            HandSet hand_set(h);
+            Direction dir = static_cast<Direction>(d);
+            g_eval_params->king_safety[hand_set][dir][piece][attacks][defenses]
+              = MixPackedScore(g_eval_params->king_safety[hand_set][dir][piece][attacks][defenses], org_rate
+                             , eval_params2 ->king_safety[hand_set][dir][piece][attacks][defenses], mix_rate);
+          }
+
+  // 6. 飛車・角・香車の利き
+  for (int s = Square::min(); s <= Square::max(); ++s) {
+    Square i(s);
+    for (Color c : {kBlack, kWhite})
+      for (Square j : Square::all_squares())
+        for (Square k : Square::all_squares()) {
+          g_eval_params->rook_control[c][i][j][k]
+            = MixPackedScore(g_eval_params->rook_control[c][i][j][k], org_rate
+                           , eval_params2 ->rook_control[c][i][j][k], mix_rate);
+          g_eval_params->bishop_control[c][i][j][k]
+            = MixPackedScore(g_eval_params->bishop_control[c][i][j][k], org_rate
+                           , eval_params2 ->bishop_control[c][i][j][k], mix_rate);
+          g_eval_params->lance_control[c][i][j][k]
+            = MixPackedScore(g_eval_params->lance_control[c][i][j][k], org_rate
+                           , eval_params2 ->lance_control[c][i][j][k], mix_rate);
+        }
+
+    for (Square j : Square::all_squares())
+      for (Piece p : Piece::all_pieces()) {
+        g_eval_params->rook_threat[i][j][p]
+          = MixPackedScore(g_eval_params->rook_threat[i][j][p], org_rate
+                         , eval_params2 ->rook_threat[i][j][p], mix_rate);
+        g_eval_params->bishop_threat[i][j][p]
+          = MixPackedScore(g_eval_params->bishop_threat[i][j][p], org_rate
+                         , eval_params2 ->bishop_threat[i][j][p], mix_rate);
+        g_eval_params->lance_threat[i][j][p]
+          = MixPackedScore(g_eval_params->lance_threat[i][j][p], org_rate
+                         , eval_params2 ->lance_threat[i][j][p], mix_rate);
+      }
+  }
+
+  // 7. 手番
+  g_eval_params->tempo
+    = MixPackedScore(g_eval_params->tempo, org_rate
+                   , eval_params2 ->tempo, mix_rate);
+
+  std::printf("Mixed eval parameters.\n");
 }

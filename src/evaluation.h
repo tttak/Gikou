@@ -30,6 +30,7 @@
 #include "square.h"
 #include "types.h"
 class Position;
+struct EvalParameters;
 
 /**
  * 評価値のスケールです.
@@ -137,7 +138,7 @@ class Evaluation {
    */
   static void Init();
 
-  static void ReadParametersFromFile(const char* file_name);
+  static bool ReadParametersFromFile(const char* file_name, std::unique_ptr<EvalParameters>& eval_params);
 
   /**
    * 局面の評価値を計算します.
@@ -168,6 +169,18 @@ class Evaluation {
                                        const PsqControlList& previous_list,
                                        const PsqControlList& current_list,
                                        PsqList* psq_list);
+
+  /**
+   * 評価関数パラメータをファイルへ保存します.
+   * @param file_name   評価関数パラメータファイル名
+   * @param eval_params 評価関数パラメータ
+   */
+  static bool WriteParametersToFile(const char* file_name, std::unique_ptr<EvalParameters>& eval_params);
+
+  /**
+   * 評価関数パラメータを混ぜ合わせます.
+   */
+  static void MixParameters();
 };
 
 /**

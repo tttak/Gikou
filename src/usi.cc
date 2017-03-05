@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou Stockfish7 20170212 EvalParams";
+const auto kProgramName = "Gikou EvalMix 20170301";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -223,7 +223,10 @@ void ExecuteCommand(const std::string& command, Node* const node,
     static bool first = true;
     if (first) {
       first = false;
-      Evaluation::ReadParametersFromFile("params.bin");
+      Evaluation::ReadParametersFromFile("params.bin", g_eval_params);
+
+      // 評価関数パラメータを混ぜ合わせる
+      Evaluation::MixParameters();
     }
 
     SYNCED_PRINTF("readyok\n");
@@ -258,6 +261,15 @@ void ExecuteCommand(const std::string& command, Node* const node,
     }
     SYNCED_PRINTF("%s\n", sfen_moves.c_str());
 #endif
+
+  } else if (command == "eval") {
+    // 評価値を算出し、標準出力へ出力する
+    Score score = Evaluation::Evaluate(*node);
+    SYNCED_PRINTF("%d\n", score);
+
+  } else if (command == "saveeval") {
+    // 評価関数パラメータをファイルへ保存する
+    Evaluation::WriteParametersToFile("params_mixed.bin", g_eval_params);
 
   } else {
     SYNCED_PRINTF("info string Unsupported Command: %s\n", command.c_str());
@@ -351,6 +363,14 @@ UsiOptions::UsiOptions() {
   // 探索で実現確率を使用する深さの最小値
   map_.emplace("Z01_UseProbabilityMinDepth" , UsiOption(8, 0, 100));
 
+  // ----- 評価関数のmix
+
+  // 混ぜ合わせる評価関数ファイル
+  map_.emplace("Z02_MixGikouEvalFile", UsiOption("./params2.bin", 0));
+  // 評価値を混ぜる割合（単位は%）
+  map_.emplace("Z03_MixGikouEvalRate", UsiOption(50, 0, 100));
+
+
   // ----- 評価値の割合（序盤、終盤）（単位は%）
 
   // 評価値の割合【KP】（序盤、終盤）（単位は%）
@@ -398,6 +418,13 @@ void UsiOptions::PrintListOfOptions() {
                     option.default_value(),
                     option.min(),
                     option.max());
+
+    // USIオプションの「string」に対応
+    } else if (option.type() == UsiOption::kString) {
+      SYNCED_PRINTF("option name %s type string default %s\n",
+                    name.c_str(),
+                    option.str_default_value().c_str());
     }
+
   }
 }
