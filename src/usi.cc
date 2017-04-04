@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou AperyEvalMixKKPT 20161204";
+const auto kProgramName = "Gikou AperyEvalMixKKPT SF7 20170404";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -362,7 +362,10 @@ UsiOptions::UsiOptions() {
   map_.emplace("Z03_AperyEvalShuban", UsiOption(50, 0, 100));
 
   // Aperyの評価関数バイナリのフォルダ
-  map_.emplace("Z04_AperyEvalFolder", UsiOption("./Apery_20160307", 0));
+  map_.emplace("Z04_AperyEvalFolder", UsiOption("./Apery_20161007", 0));
+
+  // 探索で実現確率を使用する深さの最小値
+  map_.emplace("Z10_UseProbabilityMinDepth" , UsiOption(8, 0, 100));
 }
 
 void UsiOptions::PrintListOfOptions() {

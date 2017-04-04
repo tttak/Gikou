@@ -103,3 +103,6 @@
 　・技巧の評価値はオリジナルのまま。手番の評価を含む。
 
 
+■Gikou_AperyEvalMixKKPT_SF7_20170404
+「Gikou_AperyEvalMixKKPT_20161106」からの変更点
+　・Stockfish7の探索部を取り込み中。

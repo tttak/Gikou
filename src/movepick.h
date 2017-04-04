@@ -45,19 +45,22 @@ class MovePicker {
              const GainsStats& gains, Depth depth, Move hash_move,
              const Array<Move, 2>& killermoves,
              const Array<Move, 2>& countermoves,
-             const Array<Move, 2>& followupmoves, Search::Stack* ss);
+             const Array<Move, 2>& followupmoves, Search::Stack* ss
+             , const Search& search, bool use_probability);
 
   /**
    * 静止探索用のコンストラクタです.
    */
   MovePicker(const Position& pos, const HistoryStats& history,
-             const GainsStats& gains, Depth depth, Move hash_move);
+             const GainsStats& gains, Depth depth, Move hash_move
+             , const Search& search);
 
   /**
    * ProbCut用のコンストラクタです.
    */
   MovePicker(const Position& pos, const HistoryStats& history,
-             const GainsStats& gains, Move hash_move);
+             const GainsStats& gains, Move hash_move
+             , const Search& search);
 
   /**
    * 次の手（残りの手の中で、最もβカットの可能性が高い手）を返します.
@@ -94,6 +97,9 @@ class MovePicker {
   const Array<Move, 2> followupmoves_;
   Array<ExtMove, 6> killers_;
   Array<ExtMove, Move::kMaxLegalMoves> moves_;
+
+  // Stockfish7対応
+  const Search& search_;
 };
 
 #endif /* MOVEPICK_H_ */
