@@ -45,7 +45,7 @@ class MovePicker {
              const GainsStats& gains, Depth depth, Move hash_move,
              const Array<Move, 2>& killermoves,
              const Array<Move, 2>& countermoves,
-             const Array<Move, 2>& followupmoves, Search::Stack* ss);
+             const Array<Move, 2>& followupmoves, Search::Stack* ss, bool use_probability);
 
   /**
    * 静止探索用のコンストラクタです.

@@ -77,7 +77,7 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
                        const Array<Move, 2>& killermoves,
                        const Array<Move, 2>& countermoves,
                        const Array<Move, 2>& followupmoves,
-                       Search::Stack* const ss)
+                       Search::Stack* const ss, bool use_probability)
     : pos_(pos),
       history_(history),
       gains_(gains),
@@ -98,7 +98,8 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
   // 指し手生成のカテゴリをセットする
   if (pos.in_check()) {
     stage_ = kEvasion;
-  } else if (depth >= 8 * kOnePly) {
+  //} else if (depth >= 8 * kOnePly) {
+  } else if (use_probability) {
     stage_ = kProbSearch;
   } else {
     stage_ = kMainSearch;

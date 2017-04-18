@@ -42,6 +42,9 @@
 #include "usi.h"
 #include "zobrist.h"
 
+// 探索で実現確率を使用する深さの最小値
+int g_UseProbabilityMinDepth;
+
 namespace {
 
 // 開発時に参照する統計データ
@@ -235,7 +238,7 @@ void Search::IterativeDeepening(Node& node, ThreadManager& thread_manager) {
   int64_t last_info_time = 0;
 
   // 反復深化を行う
-  for (int iteration = 1; iteration < kMaxPly; ++iteration) {
+  for (int iteration = 1; iteration <= limit_depth_; ++iteration) {
 
     // ワーカースレッドは、平均して２回に１回、スキップする
     if (!is_master_thread()) {
@@ -339,6 +342,12 @@ void Search::IterativeDeepening(Node& node, ThreadManager& thread_manager) {
         || elapsed_time - last_info_time > 100) {
       SendUsiInfo(node, iteration, elapsed_time, nodes);
       last_info_time = elapsed_time;
+    }
+
+    // 探索ノード数の制限チェック
+    if (nodes >= limit_nodes_) {
+      shared_.signals.stop = true; // ワーカースレッドを停止する
+      break;
     }
 
     // 思考時間管理のための統計情報をタイムマネージャーに送る
@@ -636,8 +645,12 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
 
   const Array<Move, 2> countermoves = countermoves_[(ss-1)->current_move];
   const Array<Move, 2> followupmoves = followupmoves_[(ss-2)->current_move];
+
+  // 実現確率を使用するか否か
+  bool use_probability = (depth >= g_UseProbabilityMinDepth * kOnePly);
+
   MovePicker move_picker(node, history_, gains_, depth, hash_move,
-                         ss->killers, countermoves, followupmoves, ss);
+                         ss->killers, countermoves, followupmoves, ss, use_probability);
 
   const bool improving =   ss->static_score >= (ss-2)->static_score
                         || ss->static_score == kScoreNone
@@ -785,13 +798,15 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
     // 本当はすべて実現確率にしたいところだが、実現確率の計算コストが高いため、残り深さが大きい
     // ところに限って実現確率を用いている
     if (   depth >= 3 * kOnePly
-        && (move_is_quiet || depth >= 8 * kOnePly)
+        //&& (move_is_quiet || depth >= 8 * kOnePly)
+        && (move_is_quiet || use_probability)
         && move_count >= 2
         && move != ss->killers[0]
         && move != ss->killers[1]) {
 
       // 実現確率
-      if (depth >= 8 * kOnePly) {
+      //if (depth >= 8 * kOnePly) {
+      if (use_probability) {
         // 指し手の確率に基づいて、何手減らすかを決定する
         const double kPvFactor = kIsPv ? 0.75 : 1.0;
         double consumption = kPvFactor * -std::log(probability) / std::log(2.0);

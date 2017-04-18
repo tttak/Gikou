@@ -28,6 +28,9 @@
 #include "usi.h"
 #include "usi_protocol.h"
 
+// 探索で実現確率を使用する深さの最小値
+extern int g_UseProbabilityMinDepth;
+
 namespace {
 
 const char* kBookFile = "book.bin";
@@ -43,6 +46,9 @@ Thinking::Thinking(const UsiOptions& usi_options)
 void Thinking::Initialize() {
   book_.ReadFromFile(kBookFile);
   shared_data_.hash_table.SetSize(usi_options_["USI_Hash"]);
+
+  // 探索で実現確率を使用する深さの最小値
+  g_UseProbabilityMinDepth = usi_options_["Z01_UseProbabilityMinDepth"];
 }
 
 void Thinking::StartNewGame() {
