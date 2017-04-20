@@ -35,9 +35,12 @@
 #include "thinking.h"
 #include "usi_protocol.h"
 
+void PrintMoveProbabilities(Position pos);
+void PrintBestMoveOfMoveProbabilities(Position pos);
+
 namespace {
 
-const auto kProgramName = "Gikou 20160606";
+const auto kProgramName = "Gikou MoveProbability_Depth0 20170420";
 const auto kAuthorName  = "Yosuke Demura";
 const auto kBookFile = "book.bin";
 
@@ -226,14 +229,18 @@ void ExecuteCommand(const std::string& command, Node* const node,
     SetRootNode(is, node);
 
   } else if (type == "go") {
-    UsiGoOptions go_options = UsiProtocol::ParseGoCommand(is, *node);
-    thinking->StartThinking(*node, go_options);
+    //UsiGoOptions go_options = UsiProtocol::ParseGoCommand(is, *node);
+    //thinking->StartThinking(*node, go_options);
+    PrintBestMoveOfMoveProbabilities(*node);
 
   } else if (type == "stop" || type == "ponderhit" || type == "gameover") {
     // ReceiveCommands()によりすでに処理が完了しているので、特にすることはない
 
   } else if (type == "quit") {
     SYNCED_PRINTF("info string Thank You! Good Bye!\n");
+
+  } else if (type == "PrintMoveProbabilities") {
+    PrintMoveProbabilities(*node);
 
 #ifndef MINIMUM
   } else if (command == "d") {
