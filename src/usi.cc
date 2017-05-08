@@ -35,9 +35,12 @@
 #include "thinking.h"
 #include "usi_protocol.h"
 
+void PrintMoveProbabilities(Position pos);
+void PrintBestMoveOfMoveProbabilities(Position pos);
+
 namespace {
 
-const auto kProgramName = "Gikou 2";
+const auto kProgramName = "Gikou 2 MoveProbabilityOnly_Depth0 20170508";
 const auto kAuthorName  = "Yosuke Demura";
 
 /**
@@ -230,14 +233,18 @@ void ExecuteCommand(const std::string& command, Node* const node,
     SetRootNode(is, node);
 
   } else if (type == "go") {
-    UsiGoOptions go_options = UsiProtocol::ParseGoCommand(is, *node);
-    thinking->StartThinking(*node, go_options);
+    //UsiGoOptions go_options = UsiProtocol::ParseGoCommand(is, *node);
+    //thinking->StartThinking(*node, go_options);
+    PrintBestMoveOfMoveProbabilities(*node);
 
   } else if (type == "stop" || type == "ponderhit" || type == "gameover") {
     // ReceiveCommands()によりすでに処理が完了しているので、特にすることはない
 
   } else if (type == "quit") {
     SYNCED_PRINTF("info string Thank You! Good Bye!\n");
+
+  } else if (type == "PrintMoveProbabilities") {
+    PrintMoveProbabilities(*node);
 
 #ifndef MINIMUM
   } else if (command == "d") {
@@ -322,7 +329,7 @@ UsiOptions::UsiOptions() {
   map_.emplace("MinThinkingTime", UsiOption(1000, 10, 60000));
 
   // 定跡を使うか否か（trueならば、定跡を用いる）
-  map_.emplace("OwnBook", UsiOption(true));
+  map_.emplace("OwnBook", UsiOption(false));
 
   // 定跡ファイル
   map_.emplace("BookFile", UsiOption("book.bin"));

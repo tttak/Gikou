@@ -484,6 +484,10 @@ void ComputeAccuracy(const std::vector<PositionSample>& position_samples,
   stats->num_test_positions = position_samples.size();
 }
 
+#endif /* !defined(MINIMUM) */
+
+} // namespace
+
 void PrintMoveProbabilities(Position pos) {
   // 1. 初期局面の合法手を生成する
   SimpleMoveList<kAllMoves, true> legal_moves(pos);
@@ -518,9 +522,50 @@ void PrintMoveProbabilities(Position pos) {
   std::printf("\n");
 }
 
-#endif /* !defined(MINIMUM) */
+void PrintBestMoveOfMoveProbabilities(Position pos) {
+  // 1. 初期局面の合法手を生成する
+  SimpleMoveList<kAllMoves, true> legal_moves(pos);
 
-} // namespace
+  // 合法手の数が0手の場合
+  if (legal_moves.size() == 0) {
+    std::printf("bestmove resign\n");
+    return;
+  }
+
+  // 2. 各指し手の確率を計算する
+  HistoryStats history;
+  GainsStats gains;
+  history.Clear();
+  gains.Clear();
+  PositionSample sample;
+  PositionInfo pos_info(pos, history, gains, &history, &history);
+  sample.progress = Progress::EstimateProgress(pos);
+  for (ExtMove em : legal_moves) {
+    sample.features.push_back(ExtractMoveFeatures(em.move, pos, pos_info));
+  }
+  std::valarray<double> probabilities = ComputeMoveProbabilities(sample);
+
+  // 3. 確率の高い順（降順）で、指し手をソートする
+  for (size_t i = 0; i < legal_moves.size(); ++i) {
+    legal_moves[i].score = static_cast<int>(probabilities[i] * (1 << 24));
+  }
+  std::sort(legal_moves.begin(), legal_moves.end(), [](ExtMove lhs, ExtMove rhs) {
+    return lhs.score > rhs.score;
+  });
+
+  // 4. 確率の高い順に指し手をプリントする
+  std::printf("info string");
+  for (size_t i = 0; i < legal_moves.size(); ++i) {
+    std::printf(" %s=%.2f",
+                legal_moves[i].move.ToSfen().c_str(),
+                100.0 * legal_moves[i].score / (1 << 24));
+  }
+  std::printf("\n");
+
+  // 5. 最も確率の高い指し手をbestmoveとして返す
+  std::printf("info depth 0 nodes %d pv %s\n", legal_moves.size(), legal_moves[0].move.ToSfen().c_str());
+  std::printf("bestmove %s\n", legal_moves[0].move.ToSfen().c_str());
+}
 
 #if !defined(MINIMUM)
 
