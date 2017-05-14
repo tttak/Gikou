@@ -89,6 +89,11 @@ class Thinking {
    */
   void Ponderhit();
 
+  /**
+   * 読み筋の局面の詰み情報をエンジンに伝えます.
+   */
+  void SetMateInfo(Node& node, std::vector<std::string> sfen_moves);
+
  private:
   const UsiOptions& usi_options_;
   std::mutex mutex_;

@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou 2";
+const auto kProgramName = "Gikou 2 MateInfo 20170514";
 const auto kAuthorName  = "Yosuke Demura";
 
 /**
@@ -81,6 +81,8 @@ class CommandQueue {
   std::condition_variable sleep_condition_;
 };
 
+void SetRootNode(std::istream& input, Node* const node);
+
 void ReceiveCommands(CommandQueue* const queue, Thinking* const thinking) {
   assert(queue != nullptr);
   assert(thinking != nullptr);
@@ -123,6 +125,41 @@ void ReceiveCommands(CommandQueue* const queue, Thinking* const thinking) {
     // 到着してしまい、stop/ponderhitコマンドが機能しないおそれがあるため。
     } else if (type == "go") {
       thinking->ResetSignals();
+
+    // mateinfoコマンド対応
+    // ・SimpleGougiShogiの合議タイプ「詰探索エンジンとの合議（読み筋の局面も詰探索）」で使用する。
+    // ・過去にGUI側に送った読み筋の局面について詰探索エンジンが詰みを見つけた場合、GUI側から以下のようなコマンドが送られてくる。
+    //   「mateinfo position sfen（読み筋の局面）checkmate（詰みまでの指し手）」
+    //   （例）「mateinfo position sfen ln1g1g1n1/2s1k4/p1ppp3p/5ppR1/P8/2P1LKP2/3PPP2P/5+rS2/L5sNL b BGSN2Pbg2p 1 checkmate 5f5c+ 5b5c N*6e 5c4b S*4c 4b5a G*4b 4a4b 4c4b+ 5a4b 2d2b+ S*3b G*5c 4b4a B*5b 6a5b 5c5b 4a5b 2b3b L*4b S*5c 5b6a G*6b」
+    // ・相手玉の詰みを見つけた場合だけではなく、自玉の詰みを見つけた場合もあるので注意。
+    // ・mateinfoコマンドの利用方法の一例として、この実装では置換表にmateの評価値を登録してみる。
+    } else if (type == "mateinfo") {
+      std::size_t found_sfen = command.find(" sfen ");
+      std::size_t found_checkmate = command.find(" checkmate ");
+
+      if (found_sfen != std::string::npos && found_checkmate != std::string::npos) {
+        // （例）「sfen ln1g1g1n1/2s1k4/p1ppp3p/5ppR1/P8/2P1LKP2/3PPP2P/5+rS2/L5sNL b BGSN2Pbg2p 1」
+        std::string sfen = command.substr(found_sfen + 1, found_checkmate - found_sfen - 1);
+        // （例）「5f5c+ 5b5c N*6e 5c4b S*4c 4b5a G*4b 4a4b 4c4b+ 5a4b 2d2b+ S*3b G*5c 4b4a B*5b 6a5b 5c5b 4a5b 2b3b L*4b S*5c 5b6a G*6b」
+        std::string moves = command.substr(found_checkmate + std::string(" checkmate ").length());
+
+        std::istringstream is_sfen(sfen);
+        std::istringstream is_moves(moves);
+
+        // 局面をセット
+        Node node(Position::CreateStartPosition());
+        SetRootNode(is_sfen, &node);
+
+        // 詰みまでの指し手
+        std::vector<std::string> sfen_moves;
+        for (std::string sfen_move; is_moves >> sfen_move;) {
+          sfen_moves.push_back(sfen_move);
+        }
+
+        // 読み筋の局面の詰み情報をエンジンに伝える
+        thinking->SetMateInfo(node, sfen_moves);
+        continue;
+      }
     }
 
     // コマンドをキューに保存する

@@ -191,3 +191,18 @@ void Thinking::Ponderhit() {
 
   sleep_condition_.notify_one();
 }
+
+void Thinking::SetMateInfo(Node& node, std::vector<std::string> sfen_moves) {
+  for (size_t i = 0, n = sfen_moves.size(); i < n; ++i) {
+    Move move = Move::FromSfen(sfen_moves[i], node);
+    Score eval = node.Evaluate();
+    Score score = i % 2 == 0 ? score_mate_in(n - i) : score_mated_in(n - i);
+
+    // 読み筋の局面の詰み情報を置換表に格納する
+    shared_data_.hash_table.Save(node.key(), move, score, (kMaxPly - 1) * kOnePly, kBoundExact, eval, true);
+    //SYNCED_PRINTF("i=%d, move=%s, eval=%d, score=%d\n", i, move.ToSfen().c_str(), eval, score);
+
+    // 局面を進める
+    node.MakeMove(move);
+  }
+}
