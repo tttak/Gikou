@@ -29,6 +29,14 @@
 #include "usi.h"
 #include "usi_protocol.h"
 
+// Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+int g_AperyEvalOpening;
+int g_AperyEvalMiddleGame;
+int g_AperyEvalEndGame;
+
+// Aperyの評価関数バイナリのフォルダ
+std::string g_AperyEvalFolder;
+
 Thinking::Thinking(const UsiOptions& usi_options)
     : usi_options_(usi_options),
       time_manager_(usi_options, &shared_data_.signals),
@@ -40,6 +48,14 @@ void Thinking::Initialize() {
   shared_data_.hash_table.SetSize(usi_options_["USI_Hash"]);
   shared_data_.countermoves_history.Clear();
   MoveProbability::SetCacheTableSize(ProbabilityCacheTable::kDefaultSize * usi_options_["Threads"]);
+
+  // Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+  g_AperyEvalOpening    = usi_options_["Z01_AperyEvalJoban"];
+  g_AperyEvalMiddleGame = usi_options_["Z02_AperyEvalChuban"];
+  g_AperyEvalEndGame    = usi_options_["Z03_AperyEvalShuban"];
+
+  // Aperyの評価関数バイナリのフォルダ
+  g_AperyEvalFolder = usi_options_["Z04_AperyEvalFolder"].string();
 }
 
 void Thinking::StartNewGame() {

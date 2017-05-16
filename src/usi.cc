@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou 2 (v2.0.2)";
+const auto kProgramName = "Gikou 2 (v2.0.2) AperyEvalMix 20170516";
 const auto kAuthorName  = "Yosuke Demura";
 
 /**
@@ -217,7 +217,17 @@ void ExecuteCommand(const std::string& command, Node* const node,
 
   } else if (type == "isready") {
     thinking->Initialize();
-    Evaluation::ReadParametersFromFile("params.bin");
+
+    // 評価関数ファイルの読込みは初回のみにする
+    static bool first = true;
+    if (first) {
+      first = false;
+      Evaluation::ReadParametersFromFile("params.bin");
+
+      // Aperyの評価関数ファイルの読込み
+      AperyEval::LoadEval();
+    }
+
     SYNCED_PRINTF("readyok\n");
 
   } else if (type == "setoption") {
@@ -250,6 +260,10 @@ void ExecuteCommand(const std::string& command, Node* const node,
     }
     SYNCED_PRINTF("%s\n", sfen_moves.c_str());
 #endif
+
+  } else if (command == "eval") {
+    // 評価値の詳細情報を標準出力へ出力する
+    Evaluation::Print(*node);
 
   } else {
     SYNCED_PRINTF("info string Unsupported Command: %s\n", command.c_str());
@@ -349,6 +363,14 @@ UsiOptions::UsiOptions() {
 
   // 投了する評価値（評価値がこの値以下になったら、技巧が投了する）
   map_.emplace("ResignScore", UsiOption(-10000, -kScoreInfinite, -500));
+
+  // Aperyの評価値を混ぜる割合（序盤、中盤、終盤）（単位は%）
+  map_.emplace("Z01_AperyEvalJoban" , UsiOption(50, 0, 100));
+  map_.emplace("Z02_AperyEvalChuban", UsiOption(50, 0, 100));
+  map_.emplace("Z03_AperyEvalShuban", UsiOption(50, 0, 100));
+
+  // Aperyの評価関数バイナリのフォルダ
+  map_.emplace("Z04_AperyEvalFolder", UsiOption("./elmo_eval", 0));
 }
 
 void UsiOptions::PrintListOfOptions() {
@@ -375,6 +397,12 @@ void UsiOptions::PrintListOfOptions() {
                     option.max());
     } else if (option.type() == UsiOption::kFileName) {
       SYNCED_PRINTF("option name %s type filename default %s\n",
+                    name.c_str(),
+                    option.default_string().c_str());
+
+    // USIオプションの「string」に対応
+    } else if (option.type() == UsiOption::kString) {
+      SYNCED_PRINTF("option name %s type string default %s\n",
                     name.c_str(),
                     option.default_string().c_str());
     }
