@@ -2,8 +2,13 @@
 # 1. General Compiler Settings
 #
 CXX       = g++
-CXXFLAGS  = -std=c++11 -Wall -Wextra -Wcast-qual -fno-exceptions -fno-rtti \
-            -pedantic -Wno-long-long -msse4.2 -D__STDC_CONSTANT_MACROS -fopenmp
+
+#CXXFLAGS  = -std=c++11 -Wall -Wextra -Wcast-qual -fno-exceptions -fno-rtti \
+#            -pedantic -Wno-long-long -msse4.2 -D__STDC_CONSTANT_MACROS -fopenmp
+CXXFLAGS  = -std=c++14 -Wall -Wextra -fno-exceptions -fno-rtti \
+            -Wno-long-long -msse4.2 -D__STDC_CONSTANT_MACROS -fopenmp \
+            -Wno-unused-parameter -Wno-enum-compare -Wno-unused-function
+
 INCLUDES  =
 LIBRARIES = -lpthread
 
@@ -14,6 +19,12 @@ ifeq ($(TARGET),gikou)        # Windowsの実行ファイル
 	sources  := $(shell ls src/*.cc)
 	CXXFLAGS += -O3 -DNDEBUG -DMINIMUM -DPSEUDO_RANDOM_DEVICE -static
 endif
+
+ifeq ($(TARGET),nnue)        # Windowsの実行ファイル（NNUE評価関数）
+	sources  := $(shell ls src/*.cc src/YaneuraOu/*.cc src/YaneuraOu/extra/*.cc src/YaneuraOu/eval/*.cc src/YaneuraOu/eval/nnue/*.cc src/YaneuraOu/eval/nnue/features/*.cc)
+	CXXFLAGS += -O3 -DNDEBUG -DMINIMUM -DPSEUDO_RANDOM_DEVICE -static
+endif
+
 ifeq ($(TARGET),release)      # Mac / Linuxの実行ファイル
 	sources  := $(shell ls src/*.cc)
 	CXXFLAGS += -O3 -DNDEBUG
@@ -59,9 +70,9 @@ directories  ?= $(sort $(dir $(objects))) bin
 #
 # 4. Public Targets
 #
-.PHONY: gikou release cluster consultation development profile test coverage run-coverage clean scaffold
+.PHONY: gikou nnue release cluster consultation development profile test coverage run-coverage clean scaffold
 
-gikou release cluster consultation development profile test coverage:
+gikou nnue release cluster consultation development profile test coverage:
 	$(MAKE) TARGET=$@ executable
 
 run-coverage: coverage

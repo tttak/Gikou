@@ -1337,7 +1337,16 @@ void Search::SendUsiInfo(const Node& node, int depth, int64_t time,
       buf += " score mate -" + std::to_string(static_cast<int>(kScoreMate + score));
     } else {
       // c. 勝敗を読みきっていない場合
+#if !defined(EVAL_NNUE)
       buf += " score cp " + std::to_string(static_cast<int>(score));
+#else
+      int nnue_score = score;
+      if (nnue_score <= kScoreMaxEval) {
+        nnue_score = nnue_score * 100 / 90;
+      }
+      buf += " score cp " + std::to_string(nnue_score);
+#endif
+
       if (bound == kBoundLower) {
         buf += " lowerbound";
       } else if (bound == kBoundUpper) {

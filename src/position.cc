@@ -441,6 +441,11 @@ void Position::MakeMove(Move move) {
   current_state->discovered_check_candidates = ComputeDiscoveredCheckCandidates();
   current_state->last_move = move;
 
+#if defined(EVAL_NNUE)
+  current_state->accumulator.computed_accumulation = false;
+  current_state->accumulator.computed_score = false;
+#endif
+
   // 探索ノード数を１増やす
   ++nodes_searched_;
 
@@ -541,6 +546,11 @@ void Position::MakeNullMove() {
   current_state->discovered_check_candidates = ComputeDiscoveredCheckCandidates();
   current_state->last_move      = kMoveNull;
   current_state->extended_board = previous_state->extended_board;
+
+#if defined(EVAL_NNUE)
+  current_state->accumulator = previous_state->accumulator;
+  current_state->accumulator.computed_score = false;
+#endif
 
   // 3. 探索ノード数を１増やす
   ++nodes_searched_;
@@ -1095,6 +1105,13 @@ void Position::InitStateInfo() {
   current_state_info_->num_checkers = current_state_info_->checkers.count();
   current_state_info_->extended_board.Clear();
   current_state_info_->extended_board.SetAllPieces(*this);
+
+#if defined(EVAL_NNUE)
+  current_state_info_->accumulator.score = VALUE_ZERO;
+  current_state_info_->accumulator.computed_accumulation = false;
+  current_state_info_->accumulator.computed_score = false;
+  current_state_info_->dirtyPiece.dirty_num = 0;
+#endif
 }
 
 Bitboard Position::ComputeObstructingPieces(Color king_color) const {

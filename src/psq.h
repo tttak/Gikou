@@ -27,6 +27,10 @@
 #include "common/sequence.h"
 #include "hand.h"
 #include "move.h"
+
+#include "YaneuraOu/config.h"
+#include "YaneuraOu/evaluate.h"
+
 class Position;
 
 /**
@@ -268,7 +272,11 @@ class PsqList {
   /**
    * 特定の指し手に沿って局面を進めた場合に、インデックスリストを差分計算します.
    */
+#if !defined(EVAL_NNUE)
   void MakeMove(Move move);
+#else
+  void MakeMove(Move move, Eval::DirtyPiece& dp);
+#endif
 
   /**
    * 特定の指し手を取り消して局面を戻す場合に、インデックスリストを差分計算します.
@@ -421,5 +429,15 @@ class PsqControlList {
     uint16_t word_[88];
   };
 };
+
+/**
+ * NNUE評価関数用のPsqIndexへの変換テーブルを初期化します.
+ */
+void InitNnuePsqIndexArray();
+
+/**
+ * NNUE評価関数用のPsqIndexを取得します.
+ */
+Eval::BonaPiece GetNnuePsqIndex(PsqIndex psq_index);
 
 #endif /* PSQ_H_ */

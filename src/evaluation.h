@@ -29,6 +29,9 @@
 #include "psq.h"
 #include "square.h"
 #include "types.h"
+
+#include "YaneuraOu/config.h"
+
 class Position;
 
 /**
@@ -80,22 +83,30 @@ struct EvalDetail {
   }
 
   EvalDetail& operator+=(const EvalDetail& rhs) {
+#if !defined(EVAL_NNUE)
     kp[kBlack]  += rhs.kp[kBlack];
     kp[kWhite]  += rhs.kp[kWhite];
     controls    += rhs.controls;
     two_pieces  += rhs.two_pieces;
     king_safety += rhs.king_safety;
     sliders     += rhs.sliders;
+#else
+    nnue_score  += rhs.nnue_score;
+#endif
     return *this;
   }
 
   EvalDetail& operator-=(const EvalDetail& rhs) {
+#if !defined(EVAL_NNUE)
     kp[kBlack]  -= rhs.kp[kBlack];
     kp[kWhite]  -= rhs.kp[kWhite];
     controls    -= rhs.controls;
     two_pieces  -= rhs.two_pieces;
     king_safety -= rhs.king_safety;
     sliders     -= rhs.sliders;
+#else
+    nnue_score  -= rhs.nnue_score;
+#endif
     return *this;
   }
 
@@ -106,6 +117,8 @@ struct EvalDetail {
    * @return 進行度と手番を考慮した、最終的な得点
    */
   Score ComputeFinalScore(Color side_to_move, double* progress_output = nullptr) const;
+
+#if !defined(EVAL_NNUE)
 
   /** KP（King-Piece）に関する評価値. */
   ArrayMap<PackedScore, Color> kp{PackedScore(0), PackedScore(0)};
@@ -121,6 +134,12 @@ struct EvalDetail {
 
   /** 飛び駒に関する評価値. */
   PackedScore sliders{0};
+
+#else
+  /** NNUEの評価値. */
+  Score nnue_score;
+#endif
+
 };
 
 /**
@@ -150,6 +169,7 @@ class Evaluation {
    */
   static EvalDetail EvaluateAll(const Position& pos, const PsqList& psq_list);
 
+#if !defined(EVAL_NNUE)
   /**
    * 評価値の差分計算を行います.
    * @param pos           評価値を計算したい局面
@@ -164,6 +184,12 @@ class Evaluation {
                                        const PsqControlList& previous_list,
                                        const PsqControlList& current_list,
                                        PsqList* psq_list);
+#else
+  static EvalDetail EvaluateDifference(const Position& pos,
+                                       const EvalDetail& previous_eval,
+                                       PsqList* psq_list);
+#endif
+
 };
 
 /**

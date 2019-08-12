@@ -30,6 +30,9 @@
 #include "piece.h"
 #include "square.h"
 
+#include "YaneuraOu/config.h"
+#include "YaneuraOu/eval/nnue/nnue_accumulator.h"
+
 /**
  * 局面を表すクラスです.
  */
@@ -463,7 +466,7 @@ class Position {
    */
   void Print(Move move = kMoveNone) const;
 
- private:
+ //private:
 
   struct StateInfo {
     Bitboard checkers;
@@ -472,7 +475,30 @@ class Position {
     Move last_move;
     int num_checkers;
     ExtendedBoard extended_board;
+
+#if defined(EVAL_NNUE)
+    Eval::NNUE::Accumulator accumulator;
+#endif
+
+#if defined(USE_FV38) || defined(USE_FV_VAR)
+    // 評価値の差分計算の管理用
+    Eval::DirtyPiece dirtyPiece;
+#endif
   };
+
+  // 現在の局面に対応するStateInfoを返す。
+  // たとえば、state()->capturedPieceであれば、前局面で捕獲された駒が格納されている。
+  std::vector<StateInfo>::iterator state() const { return current_state_info_; }
+
+  PsqList* GetPsqList() const {
+    return psq_list_;
+  }
+
+  void SetPsqList(PsqList* psq_list) {
+    psq_list_ = psq_list;
+  }
+
+ private:
 
   // ComputePinnedPieces() / ComputeDiscoveredCheckCandidates() の内部実装です
   Bitboard ComputeObstructingPieces(Color king_color) const;
@@ -496,6 +522,8 @@ class Position {
   ArrayMap<Piece, Square> piece_on_;
 
   ArrayMap<int, PieceType> num_unused_pieces_;
+
+  PsqList* psq_list_;
 };
 
 inline const ArrayMap<Bitboard, Color>& Position::color_bb() const {

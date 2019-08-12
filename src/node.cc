@@ -97,17 +97,31 @@ Score Node::Evaluate(double* const progress) {
   // 必要に応じて評価値の差分計算を行う
   if (!current->eval_is_updated) {
     const auto previous = current - 1;
+
+#if !defined(EVAL_NNUE)
     current->psq_control_list = extended_board().GetPsqControlList();
     EvalDetail diff = Evaluation::EvaluateDifference(*this,
                                                      previous->eval_detail,
                                                      previous->psq_control_list,
                                                      current->psq_control_list,
                                                      &psq_list_);
+#else
+    EvalDetail diff = Evaluation::EvaluateDifference(*this,
+                                                     previous->eval_detail,
+                                                     &psq_list_);
+#endif
+
     current->eval_detail = previous->eval_detail + diff;
     current->eval_is_updated = true;
   }
 
   Score score = current->eval_detail.ComputeFinalScore(side_to_move(), progress);
+
+#if defined(EVAL_NNUE)
+  if (progress != nullptr) {
+      *progress = Progress::EstimateProgress(*this, psq_list_);
+  }
+#endif
 
 #ifndef NDEBUG
   // 双方の玉がある場合のみ、評価関数の差分計算結果のチェックを行う
@@ -117,6 +131,32 @@ Score Node::Evaluate(double* const progress) {
     // 進行度のチェック
     if (progress != nullptr) {
       assert(*progress == Progress::EstimateProgress(*this));
+    }
+  }
+#endif
+
+// デバッグ用
+#if 0
+  // 評価値のチェック
+  if (score != Evaluation::Evaluate(*this)) {
+    printf("score != Evaluation::Evaluate(*this)\n");
+    printf("score=%d\n", score);
+    printf("Evaluation::Evaluate(*this)=%d\n", Evaluation::Evaluate(*this));
+    printf("(*this).last_move()=%s\n", (*this).last_move().ToSfen().c_str());
+    printf("(*this).last_move().piece()=%s\n", (*this).last_move().piece().ToSfen().c_str());
+    printf("(*this).last_move().is_drop()=%d\n", (*this).last_move().is_drop());
+    printf("(*this).last_move().is_capture()=%d\n", (*this).last_move().is_capture());
+    printf("(*this).last_move().captured_piece()=%s\n", (*this).last_move().captured_piece().ToSfen().c_str());
+    (*this).Print();
+
+    exit(EXIT_FAILURE);
+  }
+
+  // 進行度のチェック
+  if (progress != nullptr) {
+    if (*progress != Progress::EstimateProgress(*this)) {
+      printf("*progress != Progress::EstimateProgress(*this)\n");
+      exit(EXIT_FAILURE);
     }
   }
 #endif
@@ -146,6 +186,11 @@ void Node::MakeMove(Move move, bool move_gives_check, Key64 key_after_move) {
   // 指し手を進める
   Position::MakeMove(move, move_gives_check);
 
+#if defined(EVAL_NNUE)
+  Eval::DirtyPiece& dp = this->state()->dirtyPiece;
+  psq_list_.MakeMove(move, dp);
+#endif
+
   // 千日手関連の処理
   current->hand = stm_hand();
   if (in_check()) {
@@ -164,9 +209,13 @@ void Node::UnmakeMove(Move move) {
   assert(move == last_move());
 
   // 評価値の差分計算が行われた場合には、その際にPsqListも更新されているので、元に戻す必要がある
+#if !defined(EVAL_NNUE)
   if (stack_.back().eval_is_updated) {
     psq_list_.UnmakeMove(last_move());
   }
+#else
+  psq_list_.UnmakeMove(last_move());
+#endif
 
   // 局面を元に戻す
   Position::UnmakeMove(move);
@@ -185,13 +234,22 @@ void Node::MakeNullMove() {
   current->position_key = (current-1)->position_key + null_move_key;
   current->board_key    = (current-1)->board_key    + null_move_key;
 
+#if !defined(EVAL_NNUE)
   // 現在の評価関数の実装では、１手パスをしても評価値を再計算する必要はない
   current->psq_control_list = (current-1)->psq_control_list;
   current->eval_detail = (current-1)->eval_detail;
   current->eval_is_updated = true;
+#else
+  current->eval_is_updated = false;
+#endif
 
   // １手パスする
   Position::MakeNullMove();
+
+#if defined(EVAL_NNUE)
+  Eval::DirtyPiece& dp = this->state()->dirtyPiece;
+  dp.dirty_num = 0;
+#endif
 
   // 千日手関連の処理
   current->hand = stm_hand();

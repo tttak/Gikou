@@ -151,6 +151,10 @@ class Node : public Position {
    */
   void UnmakeNullMove();
 
+  PsqList GetPsqList() {
+    return psq_list_;
+  }
+
  private:
 
   struct Stack {

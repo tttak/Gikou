@@ -130,13 +130,22 @@ PsqList::PsqList(const Position& pos) : size_(0) {
   assert(IsOk());
 }
 
+#if !defined(EVAL_NNUE)
 void PsqList::MakeMove(const Move move) {
+#else
+void PsqList::MakeMove(const Move move, Eval::DirtyPiece& dp) {
+#endif
+
   assert(move.IsOk());
   assert(move.is_real_move());
 
   Square to = move.to();
   Piece piece = move.piece();
   Color side_to_move = piece.color();
+
+#if defined(EVAL_NNUE)
+  dp.dirty_num = move.is_capture() ? 2 : 1;
+#endif
 
   if (move.is_drop()) {
     // 打つ手の場合：移動元となった駒台のインデックスを、移動先のマスのインデックスで上書きする
@@ -146,6 +155,20 @@ void PsqList::MakeMove(const Move move) {
     list_[idx] = PsqPair::OfBoard(piece, to);
     index_[to] = idx;
     hand_[side_to_move].remove_one(pt);
+
+#if defined(EVAL_NNUE)
+    // 現在の実装では、dp.pieceNoは玉の場合にのみ使用している。
+    dp.pieceNo[0] = PIECE_NUMBER_ZERO;
+
+    PsqPair old_pair = PsqPair::OfHand(side_to_move, pt, num);
+    dp.changed_piece[0].old_piece.fb = GetNnuePsqIndex(old_pair.black());
+    dp.changed_piece[0].old_piece.fw = GetNnuePsqIndex(old_pair.white());
+
+    PsqPair new_pair = PsqPair::OfBoard(piece, to);
+    dp.changed_piece[0].new_piece.fb = GetNnuePsqIndex(new_pair.black());
+    dp.changed_piece[0].new_piece.fw = GetNnuePsqIndex(new_pair.white());
+#endif
+
   } else {
     Square from = move.from();
 
@@ -157,6 +180,19 @@ void PsqList::MakeMove(const Move move) {
       list_[idx] = PsqPair::OfHand(side_to_move, hand_type, num);
       hand_index_[side_to_move][hand_type][num] = idx;
       hand_[side_to_move].add_one(hand_type);
+
+#if defined(EVAL_NNUE)
+      // 現在の実装では、dp.pieceNoは玉の場合にのみ使用している。
+      dp.pieceNo[1] = PIECE_NUMBER_ZERO;
+
+      PsqPair old_pair = PsqPair::OfBoard(move.captured_piece(), to);
+      dp.changed_piece[1].old_piece.fb = GetNnuePsqIndex(old_pair.black());
+      dp.changed_piece[1].old_piece.fw = GetNnuePsqIndex(old_pair.white());
+
+      PsqPair new_pair = PsqPair::OfHand(side_to_move, hand_type, num);
+      dp.changed_piece[1].new_piece.fb = GetNnuePsqIndex(new_pair.black());
+      dp.changed_piece[1].new_piece.fw = GetNnuePsqIndex(new_pair.white());
+#endif
     }
 
     // 動かす手の場合：移動元のインデックスを、移動先のインデックスで上書きする
@@ -164,7 +200,27 @@ void PsqList::MakeMove(const Move move) {
       int idx = index_[from];
       list_[idx] = PsqPair::OfBoard(move.piece_after_move(), to);
       index_[to] = idx;
+
+#if defined(EVAL_NNUE)
+      // 現在の実装では、dp.pieceNoは玉の場合にのみ使用している。
+      dp.pieceNo[0] = PIECE_NUMBER_ZERO;
+
+      PsqPair old_pair = PsqPair::OfBoard(piece, from);
+      dp.changed_piece[0].old_piece.fb = GetNnuePsqIndex(old_pair.black());
+      dp.changed_piece[0].old_piece.fw = GetNnuePsqIndex(old_pair.white());
+
+      PsqPair new_pair = PsqPair::OfBoard(move.piece_after_move(), to);
+      dp.changed_piece[0].new_piece.fb = GetNnuePsqIndex(new_pair.black());
+      dp.changed_piece[0].new_piece.fw = GetNnuePsqIndex(new_pair.white());
+#endif
     }
+#if defined(EVAL_NNUE)
+    else {
+        // 現在の実装では、dp.pieceNoは玉の場合にのみ使用している。
+        dp.pieceNo[0] = piece.color() == kBlack ? PIECE_NUMBER_BKING : PIECE_NUMBER_WKING;
+    }
+#endif
+
   }
 
   assert(IsOk());
@@ -292,3 +348,146 @@ PsqControlList::BitSet128 PsqControlList::ComputeDifference(const PsqControlList
 
   return bitset;
 }
+
+
+/** NNUE評価関数用のPsqIndexへの変換テーブル. */
+Eval::BonaPiece nnue_psq_index_array[2110];
+
+Eval::BonaPiece GetNnuePsqIndex(PsqIndex psq_index) {
+  return nnue_psq_index_array[psq_index];
+}
+
+void SetNnuePsqIndexArray(int gikou_index_start, int nnue_index_start, int cnt) {
+  int gikou_index = gikou_index_start;
+  int nnue_index = nnue_index_start;
+
+  for (int i = 0; i < cnt; i++) {
+    nnue_psq_index_array[gikou_index] = (Eval::BonaPiece)nnue_index;
+
+    gikou_index++;
+    nnue_index++;
+  }
+}
+
+void InitNnuePsqIndexArray() {
+
+  // 技巧とNNUEのPsqIndexの持ち方の違いに注意しながら、変換テーブルを初期化する。
+  // ・技巧 ：0～2109
+  // ・NNUE ：0～1547
+  // ・技巧はインデックスに隙間なし、NNUEは隙間あり。
+  // ・技巧は「と～成銀」を「金」と区別するが、NNUEは区別しない。
+  // ・技巧は「行きどころのない駒」を除外しているが、NNUEは除外していない。
+  // ・盤上の駒の順序が異なる。
+
+
+  // ----- 持ち駒
+  SetNnuePsqIndexArray(0, 1, 18);
+  SetNnuePsqIndexArray(18, 39, 4);
+  SetNnuePsqIndexArray(22, 49, 4);
+  SetNnuePsqIndexArray(26, 59, 4);
+  SetNnuePsqIndexArray(30, 69, 4);
+  SetNnuePsqIndexArray(34, 79, 2);
+  SetNnuePsqIndexArray(36, 85, 2);
+  SetNnuePsqIndexArray(38, 20, 18);
+  SetNnuePsqIndexArray(56, 44, 4);
+  SetNnuePsqIndexArray(60, 54, 4);
+  SetNnuePsqIndexArray(64, 64, 4);
+  SetNnuePsqIndexArray(68, 74, 4);
+  SetNnuePsqIndexArray(72, 82, 2);
+  SetNnuePsqIndexArray(74, 88, 2);
+
+
+  // ----- 盤上の駒
+
+  // 先手の歩
+  SetNnuePsqIndexArray(76, 91, 8);
+  SetNnuePsqIndexArray(84, 100, 8);
+  SetNnuePsqIndexArray(92, 109, 8);
+  SetNnuePsqIndexArray(100, 118, 8);
+  SetNnuePsqIndexArray(108, 127, 8);
+  SetNnuePsqIndexArray(116, 136, 8);
+  SetNnuePsqIndexArray(124, 145, 8);
+  SetNnuePsqIndexArray(132, 154, 8);
+  SetNnuePsqIndexArray(140, 163, 8);
+
+  // 先手の香
+  SetNnuePsqIndexArray(148, 253, 8);
+  SetNnuePsqIndexArray(156, 262, 8);
+  SetNnuePsqIndexArray(164, 271, 8);
+  SetNnuePsqIndexArray(172, 280, 8);
+  SetNnuePsqIndexArray(180, 289, 8);
+  SetNnuePsqIndexArray(188, 298, 8);
+  SetNnuePsqIndexArray(196, 307, 8);
+  SetNnuePsqIndexArray(204, 316, 8);
+  SetNnuePsqIndexArray(212, 325, 8);
+
+  // 先手の桂
+  SetNnuePsqIndexArray(220, 416, 7);
+  SetNnuePsqIndexArray(227, 425, 7);
+  SetNnuePsqIndexArray(234, 434, 7);
+  SetNnuePsqIndexArray(241, 443, 7);
+  SetNnuePsqIndexArray(248, 452, 7);
+  SetNnuePsqIndexArray(255, 461, 7);
+  SetNnuePsqIndexArray(262, 470, 7);
+  SetNnuePsqIndexArray(269, 479, 7);
+  SetNnuePsqIndexArray(276, 488, 7);
+
+  // 先手の銀～飛、と～龍
+  SetNnuePsqIndexArray(283, 576, 81);
+  SetNnuePsqIndexArray(364, 738, 81);
+  SetNnuePsqIndexArray(445, 900, 81);
+  SetNnuePsqIndexArray(526, 1224, 81);
+  SetNnuePsqIndexArray(607, 738, 81);
+  SetNnuePsqIndexArray(688, 738, 81);
+  SetNnuePsqIndexArray(769, 738, 81);
+  SetNnuePsqIndexArray(850, 738, 81);
+  SetNnuePsqIndexArray(931, 1062, 81);
+  SetNnuePsqIndexArray(1012, 1386, 81);
+
+  // 後手の歩
+  SetNnuePsqIndexArray(1093, 171, 8);
+  SetNnuePsqIndexArray(1101, 180, 8);
+  SetNnuePsqIndexArray(1109, 189, 8);
+  SetNnuePsqIndexArray(1117, 198, 8);
+  SetNnuePsqIndexArray(1125, 207, 8);
+  SetNnuePsqIndexArray(1133, 216, 8);
+  SetNnuePsqIndexArray(1141, 225, 8);
+  SetNnuePsqIndexArray(1149, 234, 8);
+  SetNnuePsqIndexArray(1157, 243, 8);
+
+  // 後手の香
+  SetNnuePsqIndexArray(1165, 333, 8);
+  SetNnuePsqIndexArray(1173, 342, 8);
+  SetNnuePsqIndexArray(1181, 351, 8);
+  SetNnuePsqIndexArray(1189, 360, 8);
+  SetNnuePsqIndexArray(1197, 369, 8);
+  SetNnuePsqIndexArray(1205, 378, 8);
+  SetNnuePsqIndexArray(1213, 387, 8);
+  SetNnuePsqIndexArray(1221, 396, 8);
+  SetNnuePsqIndexArray(1229, 405, 8);
+
+  // 後手の桂
+  SetNnuePsqIndexArray(1237, 495, 7);
+  SetNnuePsqIndexArray(1244, 504, 7);
+  SetNnuePsqIndexArray(1251, 513, 7);
+  SetNnuePsqIndexArray(1258, 522, 7);
+  SetNnuePsqIndexArray(1265, 531, 7);
+  SetNnuePsqIndexArray(1272, 540, 7);
+  SetNnuePsqIndexArray(1279, 549, 7);
+  SetNnuePsqIndexArray(1286, 558, 7);
+  SetNnuePsqIndexArray(1293, 567, 7);
+
+  // 後手の銀～飛、と～龍
+  SetNnuePsqIndexArray(1300, 657, 81);
+  SetNnuePsqIndexArray(1381, 819, 81);
+  SetNnuePsqIndexArray(1462, 981, 81);
+  SetNnuePsqIndexArray(1543, 1305, 81);
+  SetNnuePsqIndexArray(1624, 819, 81);
+  SetNnuePsqIndexArray(1705, 819, 81);
+  SetNnuePsqIndexArray(1786, 819, 81);
+  SetNnuePsqIndexArray(1867, 819, 81);
+  SetNnuePsqIndexArray(1948, 1143, 81);
+  SetNnuePsqIndexArray(2029, 1467, 81);
+
+}
+

@@ -49,7 +49,15 @@ std::string UsiInfo::ToString() const {
       str += " score mate -" + std::to_string(int(kScoreMate + s));
     } else {
       // c. 勝敗を読みきっていない場合
+#if !defined(EVAL_NNUE)
       str += " score cp " + std::to_string(int(score));
+#else
+      int nnue_score = score;
+      if (nnue_score <= kScoreMaxEval) {
+        nnue_score = nnue_score * 100 / 90;
+      }
+      str += " score cp " + std::to_string(nnue_score);
+#endif
     }
 
     // 2. upperbound/lowerboundの出力

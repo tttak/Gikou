@@ -25,11 +25,18 @@
 #include "position.h"
 #include "progress.h"
 
+#include "YaneuraOu/eval/nnue/evaluate_nnue.h"
+
 std::unique_ptr<EvalParameters> g_eval_params(new EvalParameters);
+
+extern bool g_load_eval_completed;
 
 Score EvalDetail::ComputeFinalScore(Color side_to_move,
                                     double* const progress_output) const {
 
+#if defined(EVAL_NNUE)
+  return nnue_score;
+#else
   PackedScore kp_total = kp[kBlack] + kp[kWhite];
   PackedScore others = controls + two_pieces + king_safety + sliders;
   int64_t sum = 0;
@@ -83,8 +90,10 @@ Score EvalDetail::ComputeFinalScore(Color side_to_move,
 
   // 5. 後手番の場合は、得点を反転させる（常に手番側から見た点数になるようにする）
   return static_cast<Score>(side_to_move == kBlack ? score : -score);
+#endif
 }
 
+#if !defined(EVAL_NNUE)
 namespace {
 
 /**
@@ -538,6 +547,7 @@ EvalDetail EvaluateDifferenceForNonKingMove(const Position& pos,
 }
 
 } // namespace
+#endif
 
 Score Evaluation::Evaluate(const Position& pos) {
   if (!pos.king_exists(kBlack) || !pos.king_exists(kWhite)) {
@@ -556,6 +566,14 @@ EvalDetail Evaluation::EvaluateAll(const Position& pos,
     return sum;
   }
 
+#if defined(EVAL_NNUE)
+  // NNUE
+  if (g_load_eval_completed) {
+    auto pos_ = const_cast<Position*>(&pos);
+    pos_->SetPsqList(const_cast<PsqList*>(&psq_list));
+    sum.nnue_score = Eval::compute_eval(*pos_);
+  }
+#else
   // 1. 駒の位置評価
   sum += EvaluatePositionalAdvantage(pos, psq_list);
 
@@ -568,10 +586,12 @@ EvalDetail Evaluation::EvaluateAll(const Position& pos,
 
   // 4. 飛車・角・香車の利き
   sum.sliders = EvaluateSlidingPieces(pos);
+#endif
 
   return sum;
 }
 
+#if !defined(EVAL_NNUE)
 EvalDetail Evaluation::EvaluateDifference(const Position& pos,
                                           const EvalDetail& previous_eval,
                                           const PsqControlList& previous_list,
@@ -619,6 +639,26 @@ EvalDetail Evaluation::EvaluateDifference(const Position& pos,
 
   return diff;
 }
+
+#else
+EvalDetail Evaluation::EvaluateDifference(const Position& pos,
+                                          const EvalDetail& previous_eval,
+                                          PsqList* const psq_list) {
+  assert(psq_list != nullptr);
+  //assert(pos.last_move().is_real_move());
+
+  EvalDetail diff;
+
+  auto pos_ = const_cast<Position*>(&pos);
+  pos_->SetPsqList(const_cast<PsqList*>(psq_list));
+  Score nnue_score = Eval::evaluate(*pos_);
+
+  diff.nnue_score = nnue_score - previous_eval.nnue_score;
+
+  return diff;
+}
+#endif
+
 
 void Evaluation::Init() {
   ReadParametersFromFile("params.bin");

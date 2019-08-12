@@ -37,7 +37,7 @@
 
 namespace {
 
-const auto kProgramName = "Gikou 2 (v2.0.2)";
+const auto kProgramName = "Gikou 2 (v2.0.2) NNUE";
 const auto kAuthorName  = "Yosuke Demura";
 
 /**
@@ -218,6 +218,10 @@ void ExecuteCommand(const std::string& command, Node* const node,
   } else if (type == "isready") {
     thinking->Initialize();
     Evaluation::ReadParametersFromFile("params.bin");
+
+    // NNUE評価関数ファイルの読込み
+    Eval::load_eval(*usi_options);
+
     SYNCED_PRINTF("readyok\n");
 
   } else if (type == "setoption") {
@@ -250,6 +254,9 @@ void ExecuteCommand(const std::string& command, Node* const node,
     }
     SYNCED_PRINTF("%s\n", sfen_moves.c_str());
 #endif
+
+  } else if (command == "eval") {
+    SYNCED_PRINTF("%d\n", Evaluation::Evaluate(*node));
 
   } else {
     SYNCED_PRINTF("info string Unsupported Command: %s\n", command.c_str());
@@ -349,6 +356,9 @@ UsiOptions::UsiOptions() {
 
   // 投了する評価値（評価値がこの値以下になったら、技巧が投了する）
   map_.emplace("ResignScore", UsiOption(-10000, -kScoreInfinite, -500));
+
+  // NNUE評価関数バイナリのフォルダ
+  map_.emplace("EvalDir", UsiOption("nnue_eval", 0));
 }
 
 void UsiOptions::PrintListOfOptions() {
@@ -375,6 +385,12 @@ void UsiOptions::PrintListOfOptions() {
                     option.max());
     } else if (option.type() == UsiOption::kFileName) {
       SYNCED_PRINTF("option name %s type filename default %s\n",
+                    name.c_str(),
+                    option.default_string().c_str());
+
+    // USIオプションの「string」に対応
+    } else if (option.type() == UsiOption::kString) {
+      SYNCED_PRINTF("option name %s type string default %s\n",
                     name.c_str(),
                     option.default_string().c_str());
     }

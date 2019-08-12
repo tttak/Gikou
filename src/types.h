@@ -42,7 +42,12 @@ constexpr int kMaxPly = 100;
 
 enum Color {
   kBlack = 0, /// "sente" in Japanese
-  kWhite = 1  /// "gote" in Japanese
+  kWhite = 1, /// "gote" in Japanese
+
+  BLACK = 0,
+  WHITE = 1,
+  COLOR_ZERO = 0,
+  COLOR_NB = 2
 };
 
 enum File {
@@ -79,7 +84,14 @@ enum Score {
   kScoreNone     =  32601,
   kScoreMateInMaxPly  = +kScoreMate - kMaxPly,
   kScoreMatedInMaxPly = -kScoreMate + kMaxPly,
+
+  VALUE_ZERO = kScoreZero,
+
+  // 評価関数の返す値の最大値(2**14ぐらいに収まっていて欲しいところだが..)
+  VALUE_MAX_EVAL = 27000,
 };
+
+using Value = Score;
 
 enum Depth {
   kDepthZero = 0,
@@ -127,6 +139,7 @@ class Key64
 
 ENABLE_ADD_AND_SUBTRACT_OPERATORS(File)
 ENABLE_ADD_AND_SUBTRACT_OPERATORS(Rank)
+ENABLE_ADD_AND_SUBTRACT_OPERATORS(Color)
 ENABLE_ARITHMETIC_OPERATORS(Score)
 ENABLE_ARITHMETIC_OPERATORS(Depth)
 
