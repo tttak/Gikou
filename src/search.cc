@@ -1341,7 +1341,7 @@ void Search::SendUsiInfo(const Node& node, int depth, int64_t time,
       buf += " score cp " + std::to_string(static_cast<int>(score));
 #else
       int nnue_score = score;
-      if (nnue_score <= kScoreMaxEval) {
+      if (std::abs(nnue_score) <= VALUE_MAX_EVAL) {
         nnue_score = nnue_score * 100 / 90;
       }
       buf += " score cp " + std::to_string(nnue_score);

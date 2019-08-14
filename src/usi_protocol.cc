@@ -53,7 +53,7 @@ std::string UsiInfo::ToString() const {
       str += " score cp " + std::to_string(int(score));
 #else
       int nnue_score = score;
-      if (nnue_score <= kScoreMaxEval) {
+      if (std::abs(nnue_score) <= VALUE_MAX_EVAL) {
         nnue_score = nnue_score * 100 / 90;
       }
       str += " score cp " + std::to_string(nnue_score);
