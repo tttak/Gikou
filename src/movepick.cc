@@ -329,6 +329,11 @@ void MovePicker::GenerateNext() {
       end_ = RemoveIllegalMoves(pos_, cur_, end_);
       size_t num_moves = end_ - cur_;
 
+      // ABEND回避
+      if (num_moves == 0) {
+        return;
+      }
+
       // 指し手の実現確率を計算する
       const HistoryStats* cmh = (ss_-1)->countermoves_history;
       const HistoryStats* fmh = (ss_-2)->countermoves_history;
