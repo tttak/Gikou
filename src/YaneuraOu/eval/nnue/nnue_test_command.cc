@@ -4,11 +4,16 @@
 
 #if defined(ENABLE_TEST_CMD) && defined(EVAL_NNUE)
 
-#include "../../extra/all.h"
+#include <set>
+#include <iostream>
+#include <fstream>
+#include <random>
+
 #include "evaluate_nnue.h"
 #include "nnue_test_command.h"
 
-#include <set>
+#include "../../../movegen.h"
+#include "../../../node.h"
 
 namespace Eval {
 
@@ -17,16 +22,12 @@ namespace NNUE {
 namespace {
 
 // 主に差分計算に関するRawFeaturesのテスト
-void TestFeatures(Position& pos) {
+void TestFeatures() {
   const std::uint64_t num_games = 1000;
-  StateInfo si;
-  pos.set_hirate(&si,Threads.main());
   const int MAX_PLY = 256; // 256手までテスト
-
-  StateInfo state[MAX_PLY]; // StateInfoを最大手数分だけ
   int ply; // 初期局面からの手数
 
-  PRNG prng(20171128);
+  std::mt19937_64 gen(20171128);
 
   std::uint64_t num_moves = 0;
   std::vector<std::uint64_t> num_updates(kRefreshTriggers.size() + 1);
@@ -91,24 +92,29 @@ void TestFeatures(Position& pos) {
   std::cout << "start testing with random games";
 
   for (std::uint64_t i = 0; i < num_games; ++i) {
+    Node pos(Position::CreateStartPosition());
+    PsqList psq_list1(pos);
+    pos.SetPsqList(&psq_list1);
     auto index_sets = make_index_sets(pos);
     for (ply = 0; ply < MAX_PLY; ++ply) {
-      MoveList<LEGAL_ALL> mg(pos); // 全合法手の生成
+      SimpleMoveList<kAllMoves, true> mg(pos); // 全合法手の生成
 
       // 合法な指し手がなかった == 詰み
       if (mg.size() == 0)
         break;
 
       // 生成された指し手のなかからランダムに選び、その指し手で局面を進める。
-      Move m = mg.begin()[prng.rand(mg.size())];
-      pos.do_move(m, state[ply]);
+      std::uniform_int_distribution<uint64_t> dis(0, mg.size() - 1);
+      Move m = mg.begin()[dis(gen)].move;
+      pos.MakeMove(m);
+
+      PsqList psq_list2(pos);
+      pos.SetPsqList(&psq_list2);
 
       ++num_moves;
       update_index_sets(pos, &index_sets);
       ASSERT(index_sets == make_index_sets(pos));
     }
-
-    pos.set_hirate(&si,Threads.main());
 
     // 100回に1回ごとに'.'を出力(進んでいることがわかるように)
     if ((i % 100) == 0)
@@ -176,18 +182,18 @@ void PrintInfo(std::istream& stream) {
 }  // namespace
 
 // NNUE評価関数に関するUSI拡張コマンド
-void TestCommand(Position& pos, std::istream& stream) {
+void TestCommand(std::istream& stream) {
   std::string sub_command;
   stream >> sub_command;
 
   if (sub_command == "test_features") {
-    TestFeatures(pos);
+    TestFeatures();
   } else if (sub_command == "info") {
     PrintInfo(stream);
   } else {
     std::cout << "usage:" << std::endl;
-    std::cout << " test nn test_features" << std::endl;
-    std::cout << " test nn info [path/to/" << kFileName << "...]" << std::endl;
+    std::cout << " test nnue test_features" << std::endl;
+    std::cout << " test nnue info [path/to/" << kFileName << "...]" << std::endl;
   }
 }
 

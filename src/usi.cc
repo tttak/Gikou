@@ -35,9 +35,17 @@
 #include "thinking.h"
 #include "usi_protocol.h"
 
+#include "YaneuraOu/config.h"
+#include "YaneuraOu/eval/nnue/nnue_test_command.h"
+
 namespace {
 
-const auto kProgramName = "Gikou 2 (v2.0.2) NNUE";
+#if defined(EVAL_NNUE)
+const auto kProgramName = "Gikou 2 (v2.0.2) NNUE HalfKP";
+#else
+const auto kProgramName = "Gikou 2 (v2.0.2)";
+#endif
+
 const auto kAuthorName  = "Yosuke Demura";
 
 /**
@@ -219,8 +227,10 @@ void ExecuteCommand(const std::string& command, Node* const node,
     thinking->Initialize();
     Evaluation::ReadParametersFromFile("params.bin");
 
+#if defined(EVAL_NNUE)
     // NNUE評価関数ファイルの読込み
     Eval::load_eval(*usi_options);
+#endif
 
     SYNCED_PRINTF("readyok\n");
 
@@ -257,6 +267,15 @@ void ExecuteCommand(const std::string& command, Node* const node,
 
   } else if (command == "eval") {
     SYNCED_PRINTF("%d\n", Evaluation::Evaluate(*node));
+
+#if defined(EVAL_NNUE) && defined(ENABLE_TEST_CMD)
+  } else if (type == "test") {
+    std::string param;
+    is >> param;
+    if (param == "nnue") {
+      Eval::NNUE::TestCommand(is);
+    }
+#endif
 
   } else {
     SYNCED_PRINTF("info string Unsupported Command: %s\n", command.c_str());

@@ -23,6 +23,12 @@
 //      configure
 // --------------------
 
+// デバッグ用
+#define ENABLE_TEST_CMD
+//#define ASSERT_LV 5
+//#define USE_DEBUG_ASSERT
+
+
 // --- assertion tools
 
 // DEBUGビルドでないとassertが無効化されてしまうので無効化されないASSERT
