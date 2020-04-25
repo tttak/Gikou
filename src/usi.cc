@@ -40,8 +40,10 @@
 
 namespace {
 
-#if defined(EVAL_NNUE)
+#if defined(EVAL_NNUE_HALFKP)
 const auto kProgramName = "Gikou 2 (v2.0.2) NNUE HalfKP";
+#elif defined(EVAL_NNUE_HALFKPE9)
+const auto kProgramName = "Gikou 2 (v2.0.2) NNUE HalfKPE9";
 #else
 const auto kProgramName = "Gikou 2 (v2.0.2)";
 #endif

@@ -23,6 +23,11 @@
 //      configure
 // --------------------
 
+// どちらかをdefineする。
+//#define EVAL_NNUE_HALFKP
+#define EVAL_NNUE_HALFKPE9
+
+
 // デバッグ用
 #define ENABLE_TEST_CMD
 //#define ASSERT_LV 5
