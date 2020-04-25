@@ -2,13 +2,14 @@
 # 1. General Compiler Settings
 #
 CXX       = g++
+#CXX       = clang++
 
 #CXXFLAGS  = -std=c++11 -Wall -Wextra -Wcast-qual -fno-exceptions -fno-rtti \
 #            -pedantic -Wno-long-long -msse4.2 -D__STDC_CONSTANT_MACROS -fopenmp
-CXXFLAGS  = -std=c++14 -Wall -Wextra -fno-exceptions -fno-rtti \
+CXXFLAGS  = -std=c++17 -Wall -Wextra -fno-exceptions -fno-rtti \
             -Wno-long-long -msse4.2 -D__STDC_CONSTANT_MACROS -fopenmp \
             -Wno-unused-parameter -Wno-enum-compare -Wno-unused-function \
-#            -mbmi -mbmi2 -mavx2 -march=corei7-avx
+            -mbmi -mbmi2 -mavx2 -march=corei7-avx
 
 INCLUDES  =
 LIBRARIES = -lpthread

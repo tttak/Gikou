@@ -13,7 +13,7 @@
 #define USE_FV38
 #define PRETTY_JP
 
-//#define USE_AVX2
+#define USE_AVX2
 #define USE_SSE42
 #define USE_SSE41
 #define USE_SSE2
