@@ -36,6 +36,7 @@
 #include "pvtable.h"
 #include "shared_data.h"
 #include "stats.h"
+#include "YaneuraOu/movepick.h"
 
 class ThreadManager;
 
@@ -59,9 +60,16 @@ class Search {
     Move current_move;
     HistoryStats* countermoves_history;
     Move excluded_move;
-    Depth reduction;
+    //Depth reduction;
     Score static_score;
-    bool skip_null_move;
+    //bool skip_null_move;
+
+    // やねうら王
+    PieceToHistory* continuationHistory;  // historyのうち、counter moveに関するhistoryへのポインタ。
+    int ply;                              // rootからの手数。rootならば0。
+    int statScore;                        // 一度計算したhistoryの合計値をcacheしておくのに用いる。
+    int moveCount;                        // このnodeでdo_move()した生成した何手目の指し手か。(1ならおそらく置換表の指し手だろう)
+    bool inCheck;
   };
 
   static void Init();
@@ -146,10 +154,26 @@ class Search {
     return gains_;
   }
 
-  void PrepareForNextSearch();
+  void PrepareForNextSearch(int num_search_threads = 1);
+
+
+  // やねうら王（Stockfish11）のHistory
+  CounterMoveHistory* counterMoves_;
+  ButterflyHistory* mainHistory_;
+  LowPlyHistory* lowPlyHistory_;
+  CapturePieceToHistory* captureHistory_;
+  ContinuationHistory (*continuationHistory_)[2][2];
+
+  uint64_t ttHitAverage_;
+
+  // nmpMinPly : null moveの前回の適用ply
+  // nmpColor  : null moveの前回の適用Color
+  int nmpMinPly_;
+  Color nmpColor_;
+
 
  private:
-  static constexpr int kStackSize = kMaxPly + 6;
+  static constexpr int kStackSize = kMaxPly + 10;
 
   template<NodeType kNodeType>
   Score QuiecenceSearch(Node& node, Score alpha, Score beta, Depth depth,
@@ -166,16 +190,28 @@ class Search {
   void UpdateStats(Search::Stack* ss, Move move, Depth depth, Move* quiets,
                    int quiets_count);
 
+  void update_all_stats(const Node& pos, Stack* ss, Move bestMove, Score bestValue, Score beta, Square prevSq,
+                        Move* quietsSearched, int quietCount, Move* capturesSearched, int captureCount, Depth depth);
+
+  void update_continuation_histories(Stack* ss, Piece pc, Square to, int bonus);
+
+  void update_quiet_stats(const Node& pos, Stack* ss, Move move, int bonus, Depth depth);
+
   void SendUsiInfo(const Node& node, int depth, int64_t time, uint64_t nodes,
                    Bound bound = kBoundExact) const;
 
   void ResetSearchStack() {
-    std::memset(stack_.begin(), 0, 5 * sizeof(Stack));
+    std::memset(stack_.begin(), 0, 10 * sizeof(Stack));
+
+    // counterMovesをnullptrに初期化するのではなくNO_PIECEのときの値を番兵として用いる。
+    for (int i = 0; i < 7; i++) {
+      (stack_.begin() + i)->continuationHistory = &(*this->continuationHistory_)[0][0][SQ_ZERO][NO_PIECE];
+    }
   }
 
   Stack* search_stack_at_ply(int ply) {
     assert(0 <= ply && ply <= kMaxPly);
-    return stack_.begin() + 2 + ply; // stack_at_ply(0) - 2 の参照を可能にするため
+    return stack_.begin() + 6 + ply; // stack_at_ply(0) - 6 の参照を可能にするため
   }
 
   SharedData& shared_;

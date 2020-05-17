@@ -26,6 +26,7 @@
 #include "piece.h"
 #include "square.h"
 #include "types.h"
+#include "YaneuraOu/types.h"
 
 class Position;
 
@@ -182,6 +183,11 @@ class Move {
   bool is_capture_or_promotion() const;
 
   /**
+   * 取る手または歩が成る手であれば、trueを返します.
+   */
+  bool is_capture_or_pawn_promotion() const;
+
+  /**
    * 静かな手であれば、trueを返します.
    *
    * ここでいう「静かな手」とは、以下の２つの条件をみたす手のことです。
@@ -304,6 +310,11 @@ class Move {
    * 指し手の内部状態が正しければ、trueを返します（デバッグ用）.
    */
   bool IsOk() const;
+
+  // やねうら王より
+  // fromとtoをシリアライズする。駒打ちのときのfromは普通の移動の指し手とは異なる。
+  // この関数は、0 ～ ((SQ_NB+7) * SQ_NB - 1)までの値が返る
+  int from_to();
 
  private:
   /*
@@ -461,6 +472,10 @@ inline bool Move::is_capture_or_promotion() const {
   return move_ & (kKeyCaptured.mask | kKeyPromotion.mask);
 }
 
+inline bool Move::is_capture_or_pawn_promotion() const {
+  return is_capture() || (is_promotion() && piece_type_after_move() == kPPawn);
+}
+
 inline bool Move::is_quiet() const {
   const uint32_t kMask = kKeyPieceType.mask
                        | kKeyPromotion.mask
@@ -494,6 +509,11 @@ inline uint32_t Move::ToUint32() const {
 
 inline Move Move::FromUint32(uint32_t u32) {
   return Move(u32);
+}
+
+inline int Move::from_to() {
+  //return (int)(from() + (is_drop() ? (SQ_NB - 1) : 0)) * (int)SQ_NB + (int)to();
+  return (int)(is_drop() ? SQ_NB - 1 + piece_type() : from()) * (int)SQ_NB + (int)to();
 }
 
 #endif /* MOVE_H_ */

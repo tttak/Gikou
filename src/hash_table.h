@@ -42,7 +42,7 @@ class HashTable {
    * 特定の局面に関する情報を保存する.
    */
   void Save(Key64 key64, Move move, Score score, Depth depth, Bound bound,
-            Score eval, bool skip_mate3);
+            Score eval, bool skip_mate3, bool is_pv);
 
   /**
    * 指し手をハッシュテーブルに挿入します.

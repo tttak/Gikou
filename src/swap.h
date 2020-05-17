@@ -44,6 +44,11 @@ class Swap {
   static bool IsLosing(Move move, const Position& pos);
 
   /**
+   * 駒交換がthreshold以上になる場合（SEE値 >= threshold の場合）に、trueを返します.
+   */
+  static bool IsGreaterOrEqual(Move move, const Position& pos, Score threshold);
+
+  /**
    * 盤全体での駒交換の損得を計算します.
    */
   static Score EvaluateGlobalSwap(Move move, const Position& pos, int depth_limit);

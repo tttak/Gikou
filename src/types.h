@@ -83,7 +83,11 @@ enum Score {
 
 enum Depth {
   kDepthZero = 0,
-  kOnePly    = 64,
+
+  // TODO kOnePly
+  //kOnePly    = 64,
+  kOnePly    = 1,
+
   kDepthNone = -127 * kOnePly,
 };
 

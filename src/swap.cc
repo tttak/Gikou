@@ -281,6 +281,17 @@ bool Swap::IsLosing(Move move, const Position& pos) {
   return Evaluate(move, pos) < kScoreZero;
 }
 
+bool Swap::IsGreaterOrEqual(Move move, const Position& pos, Score threshold) {
+  Score gain = Material::value(move.captured_piece_type());
+  Score loss = Material::value(move.piece_type());
+  Color stm = pos.side_to_move();
+  bool opponent_can_promote = move.to().is_promotion_zone_of(~stm);
+  if (gain - loss >= threshold && !opponent_can_promote) {
+    return true;
+  }
+  return Evaluate(move, pos) >= threshold;
+}
+
 Score Swap::EvaluateGlobalSwap(const Move move, const Position& pos,
                                const int depth_limit) {
   assert(pos.MoveIsPseudoLegal(move));

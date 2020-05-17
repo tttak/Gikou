@@ -44,27 +44,29 @@ class MovePicker {
   MovePicker(const Position& pos, const HistoryStats& history,
              const GainsStats& gains, Depth depth, Move hash_move,
              const Array<Move, 2>& killermoves,
-             const Array<Move, 2>& countermoves,
-             const Array<Move, 2>& followupmoves, Search::Stack* ss);
+             //const Array<Move, 2>& countermoves,
+             //const Array<Move, 2>& followupmoves,
+             const Move cm,
+             Search::Stack* ss, const Search& search, const PieceToHistory** ch, int ply);
 
   /**
    * 静止探索用のコンストラクタです.
    */
   MovePicker(const Position& pos, const HistoryStats& history,
-             const GainsStats& gains, Depth depth, Move hash_move);
+             const GainsStats& gains, Depth depth, Move hash_move, const Search& search, const PieceToHistory** ch);
 
   /**
    * ProbCut用のコンストラクタです.
    */
   MovePicker(const Position& pos, const HistoryStats& history,
-             const GainsStats& gains, Move hash_move, Score capture_threshold);
+             const GainsStats& gains, Move hash_move, Score capture_threshold, const Search& search);
 
   /**
    * 次の手（残りの手の中で、最もβカットの可能性が高い手）を返します.
    * @param probability 指し手の実現確率（を保存するためのポインタ）
    * @return 次の手（残りの手の中で、最もβカットの可能性が高い手）
    */
-  Move NextMove(double* probability);
+  Move NextMove(double* probability, bool skipQuiets = false);
 
  private:
   /**
@@ -75,7 +77,7 @@ class MovePicker {
   /**
    * 次のカテゴリの指し手を生成します.
    */
-  void GenerateNext();
+  void GenerateNext(bool skipQuiets);
 
   const Position& pos_;
   const HistoryStats& history_;
@@ -89,11 +91,24 @@ class MovePicker {
   Score capture_threshold_;
   Depth depth_;
   Move hash_move_ = kMoveNone;
-  const Array<Move, 2> killermoves_;
-  const Array<Move, 2> countermoves_;
-  const Array<Move, 2> followupmoves_;
-  Array<ExtMove, 6> killers_;
+  //const Array<Move, 2> killermoves_;
+  //const Array<Move, 2> countermoves_;
+  //const Array<Move, 2> followupmoves_;
+  //Array<ExtMove, 6> killers_;
   Array<ExtMove, Move::kMaxLegalMoves> moves_;
+
+  // やねうら王（Stockfish11）のHistory
+  const Search& search_;
+  // コンストラクタで渡されたhistroyのポインタを保存しておく変数。
+  const PieceToHistory** continuationHistory_;
+
+  // refutations_[0] : killer[0]
+  // refutations_[1] : killer[1]
+  // refutations_[2] : counter move(コンストラクタで渡された、前の局面の指し手に対する応手)
+  ExtMove refutations_[3];
+
+  int ply_;
+
 };
 
 #endif /* MOVEPICK_H_ */

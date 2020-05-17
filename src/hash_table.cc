@@ -47,9 +47,12 @@ HashEntry* HashTable::LookUp(Key64 key64) const {
 }
 
 void HashTable::Save(Key64 key64, Move move, Score score, Depth depth,
-                              Bound bound, Score eval, bool skip_mate3) {
+                              Bound bound, Score eval, bool skip_mate3, bool is_pv) {
   const Key32 key32 = key64.ToKey32();
   HashEntry::Flag flag = skip_mate3 ? HashEntry::kSkipMate3 : HashEntry::kFlagNone;
+  if (is_pv) {
+    flag = static_cast<HashEntry::Flag>(flag | HashEntry::kFlagPv);
+  }
 
   // 1. 保存先を探す
   Bucket& bucket = table_[key64 & key_mask_];
@@ -102,7 +105,7 @@ void HashTable::InsertMoves(const Node& root_node,
 
     // エントリが消えてしまっているか、別のエントリに置き換わっている場合は、指し手を挿入する
     if (entry == nullptr || entry->move() != move) {
-      Save(node.key(), move, kScoreNone, kDepthNone, kBoundNone, kScoreNone, false);
+      Save(node.key(), move, kScoreNone, kDepthNone, kBoundNone, kScoreNone, false, true);
     }
 
     // 次の局面に移動する
