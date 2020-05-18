@@ -90,6 +90,8 @@ ThreadManager::ThreadManager(SharedData& shared_data, TimeManager& time_manager)
 }
 
 void ThreadManager::SetNumSearchThreads(size_t num_search_threads) {
+  num_search_threads_ = num_search_threads;
+
   // 必要なワーカースレッドの数を求める（１を引いているのは、マスタースレッドの分。）
   size_t num_worker_threads = num_search_threads - 1;
 
@@ -103,6 +105,10 @@ void ThreadManager::SetNumSearchThreads(size_t num_search_threads) {
   while (num_worker_threads < worker_threads_.size()) {
     worker_threads_.pop_back();
   }
+}
+
+size_t ThreadManager::GetNumSearchThreads() {
+  return num_search_threads_;
 }
 
 uint64_t ThreadManager::CountNodesSearchedByWorkerThreads() const {
@@ -134,7 +140,7 @@ RootMove ThreadManager::ParallelSearch(Node& node, const Score draw_score,
     worker->search_.set_multipv(multipv);
     worker->search_.set_depth_limit(depth_limit);
     worker->search_.set_nodes_limit(nodes_limit);
-    worker->search_.PrepareForNextSearch();
+    worker->search_.PrepareForNextSearch(GetNumSearchThreads());
     worker->StartSearching();
   }
 
@@ -145,7 +151,7 @@ RootMove ThreadManager::ParallelSearch(Node& node, const Score draw_score,
   master_search.set_multipv(multipv);
   master_search.set_depth_limit(depth_limit);
   master_search.set_nodes_limit(nodes_limit);
-  master_search.PrepareForNextSearch();
+  master_search.PrepareForNextSearch(GetNumSearchThreads());
   master_search.IterativeDeepening(node, *this);
 
   // ワーカースレッドの終了を待つ

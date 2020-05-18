@@ -127,7 +127,9 @@ class ProbabilityCacheTable {
  * 指し手が指される確率を計算するためのクラスです.
  */
 struct MoveProbability {
+  // TODO MoveProbability::kAppliedDepth
   static const Depth kAppliedDepth = 8 * kOnePly;
+  //static const Depth kAppliedDepth = 100 * kOnePly;
 
   /**
    * 指し手が指される確率を計算します.

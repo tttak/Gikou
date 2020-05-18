@@ -41,6 +41,15 @@
 #include "time_manager.h"
 #include "usi.h"
 #include "zobrist.h"
+#include "YaneuraOu/misc.h"
+
+// やねうら王（Stockfish11）のHistory
+// ・本来はThreadに持つべき
+CounterMoveHistory g_ary_counterMoves[HISTORY_ARRAY_SIZE];
+ButterflyHistory g_ary_mainHistory[HISTORY_ARRAY_SIZE];
+LowPlyHistory g_ary_lowPlyHistory[HISTORY_ARRAY_SIZE];
+CapturePieceToHistory g_ary_captureHistory[HISTORY_ARRAY_SIZE];
+ContinuationHistory g_ary_continuationHistory[HISTORY_ARRAY_SIZE][2][2];
 
 namespace {
 
@@ -51,7 +60,10 @@ uint64_t g_sum_move_counts = 0;
 uint64_t g_num_beta_cuts = 0;
 Array<uint64_t, 64> g_cuts_by_move;
 
-Array<int16_t, 2, 2, 64, 64> g_reductions; // [pv][improving][depth][moveNumber]
+//Array<int16_t, 2, 2, 64, 64> g_reductions; // [pv][improving][depth][moveNumber]
+
+constexpr uint64_t ttHitAverageWindow = 4096;
+constexpr uint64_t ttHitAverageResolution = 1024;
 
 const Array<std::vector<int>, 20> g_half_density = {
     {0, 1},
@@ -76,23 +88,42 @@ const Array<std::vector<int>, 20> g_half_density = {
     {1, 0, 0, 0, 0, 1, 1 ,1},
 };
 
-inline Score razor_margin(Depth depth) {
-  return static_cast<Score>(512 + 32 * (depth / kOnePly));
+//inline Score razor_margin(Depth depth) {
+//  return static_cast<Score>(512 + 32 * (depth / kOnePly));
+//}
+
+constexpr int razor_margin = 531;
+
+//inline int futility_move_count(bool is_pv_node, Depth depth) {
+inline int futility_move_count(bool improving, Depth depth) {
+  //return (is_pv_node ? 8 : 6) * depth / kOnePly;
+  int d = depth / kOnePly;
+  return (4 + d * d) / (2 - improving);
 }
 
-inline int futility_move_count(bool is_pv_node, Depth depth) {
-  return (is_pv_node ? 8 : 6) * depth / kOnePly;
-}
-
-inline Score futility_margin(Depth depth, double progress) {
+//inline Score futility_margin(Depth depth, double progress) {
+inline Score futility_margin(Depth depth, double progress, bool improving) {
   // 終盤になるほど、マージンを大きくする
-  int c = static_cast<int>(120.0 + 80.0 * progress);
-  return static_cast<Score>(c * (depth / kOnePly));
+  //int c = static_cast<int>(120.0 + 80.0 * progress);
+  //return static_cast<Score>(c * (depth / kOnePly));
+  return static_cast<Score>(217 * ((depth / kOnePly) - improving));
+  //return static_cast<Score>((177 + 80.0 * progress) * int((depth / kOnePly) - improving));
 }
 
-template<bool kIsPv>
-inline Depth reduction(bool i, Depth d, int mn) {
-  return static_cast<Depth>(g_reductions[kIsPv][i][std::min(int(d) / kOnePly, 63)][std::min(mn, 63)]);
+//template<bool kIsPv>
+//inline Depth reduction(bool i, Depth d, int mn) {
+//  return static_cast<Depth>(g_reductions[kIsPv][i][std::min(int(d) / kOnePly, 63)][std::min(mn, 63)]);
+//}
+
+// 探索深さを減らすためのReductionテーブル
+int Reductions[MAX_MOVES]; // [depth or moveNumber]
+
+// 残り探索深さをこの深さだけ減らす。
+// improvingとは、評価値が2手前から上がっているかのフラグ。上がっていないなら
+// 悪化していく局面なので深く読んでも仕方ないからreduction量を心もち増やす。
+Depth reduction(bool i, Depth d, int mn) {
+  int r = Reductions[d] * Reductions[mn];
+  return ((r + 511) / 1024 + (!i && r > 1007)) * kOnePly;
 }
 
 Score ScoreToTt(Score s, int ply) {
@@ -116,10 +147,19 @@ inline bool HashCutOk(Bound bound, Score hash_score, Score beta) {
   }
 }
 
+// depthに基づく、historyとstatsのupdate bonus
+int stat_bonus(Depth depth) {
+  int d = depth / kOnePly;
+
+  // Stockfish 9になって、move_picker.hのupdateで32倍していたのをやめたので、
+  // ここでbonusの計算のときに32倍しておくことになった。
+  return d > 15 ? -8 : 19 * d * d + 155 * d - 132;
+}
+
 } // namespace
 
 void Search::Init() {
-
+/*
   int d; // depth (kOnePly == 1)
   int mc; // moveCount
 
@@ -140,11 +180,19 @@ void Search::Init() {
         g_reductions[0][0][d][mc] += kOnePly / 2;
       }
     }
+*/
 }
 
 Search::Search(SharedData& shared, size_t thread_id)
     : shared_(shared),
       thread_id_(thread_id) {
+
+  // やねうら王（Stockfish11）のHistory
+  counterMoves_ = &g_ary_counterMoves[thread_id_ % HISTORY_ARRAY_SIZE];
+  mainHistory_ = &g_ary_mainHistory[thread_id_ % HISTORY_ARRAY_SIZE];
+  lowPlyHistory_ = &g_ary_lowPlyHistory[thread_id_ % HISTORY_ARRAY_SIZE];
+  captureHistory_ = &g_ary_captureHistory[thread_id_ % HISTORY_ARRAY_SIZE];
+  continuationHistory_ = &(g_ary_continuationHistory[thread_id_ % HISTORY_ARRAY_SIZE]);
 }
 
 std::vector<Move> Search::GetPv() const {
@@ -161,7 +209,7 @@ uint64_t Search::GetNodesUnder(Move move) const {
   return std::find(root_moves_.begin(), root_moves_.end(), move)->nodes;
 }
 
-void Search::PrepareForNextSearch() {
+void Search::PrepareForNextSearch(int num_search_threads) {
   // 探索情報をリセットする
   num_nodes_searched_ = 0;
   max_reach_ply_ = 0;
@@ -175,6 +223,12 @@ void Search::PrepareForNextSearch() {
   if (is_master_thread()) {
     shared_.hash_table.NextAge();
     MoveProbability::SetCacheTableToNextAge();
+  }
+
+  for (int i = 1; i < MAX_MOVES; ++i) {
+    // TODO Reductions Threads.size()
+    //Reductions[i] = int((24.8 + std::log(Threads.size())) * std::log(i));
+    Reductions[i] = int((24.8 + std::log(num_search_threads)) * std::log(i));
   }
 }
 
@@ -238,8 +292,8 @@ std::pair<Move, Score> Search::SimpleIterativeDeepening(const Position& pos) {
 
     // αβウィンドウをセットする
     Score alpha = -kScoreInfinite, beta = kScoreInfinite;
-    Score half_window = Score(64);
-    if (iteration >= 5) {
+    Score half_window = Score(21);
+    if (iteration >= 4) {
       Score previous_score = root_moves_.front().previous_score;
       alpha = std::max(previous_score - half_window, -kScoreInfinite);
       beta = std::min(previous_score + half_window, kScoreInfinite);
@@ -271,14 +325,16 @@ std::pair<Move, Score> Search::SimpleIterativeDeepening(const Position& pos) {
         beta = (alpha + beta) / 2;
       } else if (score >= beta) {
         // fail-high
-        alpha = (alpha + beta) / 2;
+        // このときalphaは動かさないほうが良いらしい。
+        // cf. Simplify aspiration window : https://github.com/official-stockfish/Stockfish/commit/a6ae2d3a31e93000e65bdfd8f0b6d9a3e6b8ce1b
+        //alpha = (alpha + beta) / 2;
         beta = std::min(beta + half_window, kScoreInfinite);
       } else {
         break;
       }
 
       // ウィンドウを指数関数的に増加させる
-      half_window += half_window / 2;
+      half_window += half_window / 4 + 5;
     }
 
     // 終了指示が来ていたら終了する & 詰みが見つかったら終了する
@@ -319,6 +375,9 @@ void Search::IterativeDeepening(Node& node, ThreadManager& thread_manager) {
   // 最後にUSIのinfoコマンドを送った時間
   int64_t last_info_time = 0;
 
+  this->ttHitAverage_ = ttHitAverageWindow * ttHitAverageResolution / 2;
+  nmpMinPly_ = 0;
+
   // 反復深化を行う
   for (int iteration = 1; iteration < kMaxPly; ++iteration) {
 
@@ -343,8 +402,8 @@ void Search::IterativeDeepening(Node& node, ThreadManager& thread_manager) {
     for (pv_index_ = 0; pv_index_ < multipv_ && !shared_.signals.stop && !shared_.signals.limit_reached; ++pv_index_) {
 
       // Aspiration Windows
-      Score half_window = Score(64);
-      if (iteration >= 5) {
+      Score half_window = Score(21);
+      if (iteration >= 4) {
         Score previous_score = root_moves_.at(pv_index_).previous_score;
         alpha = std::max(previous_score - half_window, -kScoreInfinite);
         beta = std::min(previous_score + half_window, kScoreInfinite);
@@ -380,14 +439,16 @@ void Search::IterativeDeepening(Node& node, ThreadManager& thread_manager) {
           }
         } else if (score >= beta) {
           // fail-high
-          alpha = (alpha + beta) / 2;
+          // このときalphaは動かさないほうが良いらしい。
+          // cf. Simplify aspiration window : https://github.com/official-stockfish/Stockfish/commit/a6ae2d3a31e93000e65bdfd8f0b6d9a3e6b8ce1b
+          //alpha = (alpha + beta) / 2;
           beta = std::min(beta + half_window, kScoreInfinite);
         } else {
           break;
         }
 
         // ウィンドウを指数関数的に増加させる
-        half_window += half_window / 2;
+        half_window += half_window / 4 + 5;
       }
 
       // 現在までに探索した指し手をソートする
@@ -488,6 +549,15 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   constexpr bool kIsRoot = kNodeType == kRootNode;
   constexpr bool kIsPv   = kNodeType == kPvNode || kNodeType == kRootNode;
 
+  // 残り探索深さが1手未満であるなら静止探索を呼び出す
+  if (depth <= kDepthZero) {
+    if (kNodeType == kPvNode) {
+      return QuiecenceSearch<kPvNode>(node, alpha, beta, depth, ply);
+    } else if (kNodeType == kNonPvNode) {
+      return QuiecenceSearch<kNonPvNode>(node, alpha, beta, depth, ply);
+    }
+  }
+
   assert(-kScoreInfinite <= alpha && alpha < beta && beta <= kScoreInfinite);
   assert(kIsPv || (alpha == beta - 1));
   assert(depth > kDepthZero);
@@ -502,20 +572,41 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   Key64 pos_key;
   Move best_move, hash_move, excluded_move;
   Score best_score, hash_score, eval;
+  bool improving, ttPv, formerPv;
+
+  bool captureOrPawnPromotion;
+  bool priorCapture;
+
+  // -----------------------
+  // Step 1. Initialize node
+  // -----------------------
 
   // ノードを初期化する
   Stack* const ss = search_stack_at_ply(ply);
-  const bool in_check = node.in_check();
+  const bool in_check = ss->inCheck = node.in_check();
   bool mate3_tried = false;
+
+  priorCapture = node.last_move().is_capture();
+  Color us = node.side_to_move();
 
   best_score = -kScoreInfinite;
   ss->current_move = ss->hash_move = (ss+1)->excluded_move = best_move = kMoveNone;
   ss->countermoves_history = nullptr;
-  (ss+1)->skip_null_move = false;
-  (ss+1)->reduction = kDepthZero;
+  //(ss+1)->skip_null_move = false;
+  //(ss+1)->reduction = kDepthZero;
   (ss+2)->killers[0] = (ss+2)->killers[1] = kMoveNone;
 
+  ss->moveCount = 0;
+  ss->ply = ply;
+  (ss+1)->ply = ss->ply + 1;
+
   if (!kIsRoot) {
+    // -----------------------
+    // Step 2. Check for aborted search and immediate draw
+    // -----------------------
+
+    // 探索の中断と、引き分けについてチェックする
+
     // USIのstopコマンドを受信するか、ノード数・深さの制限に達したら、探索を打ち切る
     if (shared_.signals.stop || shared_.signals.limit_reached) {
       return kScoreDraw;
@@ -541,6 +632,12 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
       return score_mate_in(ply);
     }
 
+    // -----------------------
+    // Step 3. Mate distance pruning.
+    // -----------------------
+
+    // 詰みまでの手数による枝刈り
+
     // Mate distance pruning.
     alpha = std::max(score_mated_in(ply), alpha);
     beta  = std::min(score_mate_in(ply + 1), beta);
@@ -548,6 +645,24 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
       return alpha;
     }
   }
+
+  // 前の指し手で移動させた先の升目
+  // TODO : null moveのときにprevSq == 1 == SQ_12になるのどうなのか…。
+  Square prevSq = (ss - 1)->current_move.to();
+
+  // statScoreを現nodeの孫nodeのためにゼロ初期化。
+  // statScoreは孫nodeの間でshareされるので、最初の孫だけがstatScore = 0で開始する。
+  // そのあと、孫は前の孫が計算したstatScoreから計算していく。
+  // このように計算された親局面のstatScoreは、LMRにおけるreduction rulesに影響を与える。
+  if (kIsRoot)
+    (ss + 4)->statScore = 0;
+  else
+    (ss + 2)->statScore = 0;
+
+
+  // -----------------------
+  // Step 4. Transposition table lookup.
+  // -----------------------
 
   // 置換表を参照する
   excluded_move = ss->excluded_move;
@@ -557,6 +672,18 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   hash_move = entry ? entry->move() : kMoveNone;
   ss->hash_move = hash_move;
 
+  ttPv = kIsPv || (entry != nullptr && entry->is_pv());
+  formerPv = ttPv && !kIsPv;
+
+  if (ttPv && depth > 12 * kOnePly && ss->ply - 1 < MAX_LPH && !node.last_move().is_capture() && (ss - 1)->current_move.is_real_move()) {
+    (*this->lowPlyHistory_)[ss->ply - 1][(ss - 1)->current_move.from_to()] << stat_bonus(depth - 5);
+  }
+
+  // thisThread->ttHitAverage can be used to approximate the running average of ttHit
+  this->ttHitAverage_ = (ttHitAverageWindow - 1) * this->ttHitAverage_ / ttHitAverageWindow
+                      + ttHitAverageResolution * (entry != nullptr);
+
+
   // Hash Cut
   if (   !kIsPv
       && !learning_mode_
@@ -564,21 +691,41 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
       && entry->depth() >= depth
       && hash_score != kScoreNone // Only in case of TT access race
       && HashCutOk<kIsPv>(entry->bound(), hash_score, beta)) {
-    ss->current_move = hash_move; // hash_move == kMoveNone になりうる
-    if (   hash_score >= beta
-        && hash_move != kMoveNone
-        && hash_move.is_quiet()
-        && !in_check) {
-      UpdateStats(ss, hash_move, depth, nullptr, 0);
+    //ss->current_move = hash_move; // hash_move == kMoveNone になりうる
+
+    if (hash_move != kMoveNone) {
+      if (hash_score >= beta) {
+        if (!hash_move.is_capture()) {
+          update_quiet_stats(node, ss, hash_move, stat_bonus(depth), depth);
+        }
+
+        // Stockfish相当のコード
+        if ((ss - 1)->moveCount == 1 && !priorCapture) {
+          update_continuation_histories(ss - 1, node.piece_on(prevSq), prevSq, -stat_bonus(depth + 1));
+        }
+      }
+
+      // Stockfish相当のコード
+      else if (!hash_move.is_capture_or_promotion()) {
+        int penalty = -stat_bonus(depth);
+        (*this->mainHistory_)[hash_move.from_to()][us] << penalty;
+        update_continuation_histories(ss, hash_move.piece_after_move(), hash_move.to(), penalty);
+      }
     }
+
     return hash_score;
   }
+
+  // -----------------------
+  // Step 6. Evaluate the position statically
+  // -----------------------
 
   // 評価関数を呼ぶ
   double progress;
   eval = node.Evaluate(&progress); // 評価値の差分計算を行う（進行度も同時に計算する）
   if (in_check) {
     ss->static_score = kScoreNone;
+    improving = false;
     goto moves_loop;
   } else if (entry != nullptr) {
     // 静的評価値を保存しておく
@@ -592,7 +739,7 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   } else {
     ss->static_score = eval;
     shared_.hash_table.Save(pos_key, kMoveNone, kScoreNone, kDepthNone, kBoundNone,
-                            ss->static_score, false);
+                            ss->static_score, false, ttPv);
   }
 
   // 評価値のゲイン（１手前の局面と、現局面との評価値の差）に関する統計データを更新する
@@ -604,31 +751,31 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
     gains_.Update((ss-1)->current_move, gain);
   }
 
-  // Razoring（王手がかかっている場合は、スキップされる）
-  if (   !kIsPv
-      &&  depth < 4 * kOnePly
-      &&  eval + razor_margin(depth) <= alpha
-      &&  hash_move == kMoveNone
-      &&  abs(beta) < kScoreMateInMaxPly) {
-    if (   depth <= kOnePly
-        && eval + razor_margin(3 * kOnePly) <= alpha) {
-      return QuiecenceSearch<kNonPvNode, false>(node, alpha, beta, kDepthZero, ply);
-    }
+  // -----------------------
+  // Step 7. Razoring : ~1 Elo
+  // -----------------------
 
-    Score ralpha = alpha - razor_margin(depth);
-    Score s = QuiecenceSearch<kNonPvNode, false>(node, ralpha, ralpha+1, kDepthZero, ply);
-    if (s <= ralpha) {
-      return s;
-    }
+  // Razoring（王手がかかっている場合は、スキップされる）
+  if (   !kIsRoot
+      &&  depth == kOnePly
+      &&  eval + razor_margin <= alpha) {
+    return QuiecenceSearch<kNonPvNode, false>(node, alpha, beta, kDepthZero, ply);
   }
+
+  improving =   (ss-2)->static_score == kScoreNone ? (ss->static_score >= (ss-4)->static_score
+             || (ss-4)->static_score == kScoreNone) : ss->static_score >= (ss-2)->static_score;
+
+  // -----------------------
+  // Step 8. Futility pruning: child node : ~50 Elo
+  // -----------------------
 
   // 子ノードにおける futility pruning（王手がかかっている場合は、スキップされる）
   if (   !kIsPv
-      && !ss->skip_null_move
-      &&  depth < 7 * kOnePly
-      &&  eval - futility_margin(depth, progress) >= beta
-      &&  abs(beta) < kScoreMateInMaxPly) {
-    return eval - futility_margin(depth, progress);
+      //&& !ss->skip_null_move
+      &&  depth < 6 * kOnePly
+      &&  eval - futility_margin(depth, progress, improving) >= beta
+      &&  eval < kScoreKnownWin) {
+    return eval;
   }
 
   // ３手以内の詰みを調べる
@@ -643,34 +790,47 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
       Score score = score_mate_in(ply + m3result.mate_distance);
       ss->current_move = m3result.mate_move;
       shared_.hash_table.Save(pos_key, ss->current_move, ScoreToTt(score, ply), depth,
-                      kBoundExact, ss->static_score, true);
+                      kBoundExact, ss->static_score, true, ttPv);
       return score;
     }
     g_mate3_nodes += node.nodes_searched() - m3nodes;
   }
 
+  // -----------------------
+  // Step 9. Null move search with verification search : ~40 Elo
+  // -----------------------
+
   // Null move pruning（PVノードではスキップされる）
   // また、王手がかかっている場合も、スキップされる（パスすると自玉を取られてしまうため）
   if (   !kIsPv
-      && !ss->skip_null_move
-      &&  depth >= 2 * kOnePly
+      //&& !ss->skip_null_move
+      && (ss - 1)->current_move != kMoveNull
+      && (ss - 1)->statScore < 23397
       &&  eval >= beta
-      &&  abs(beta) < kScoreMateInMaxPly) {
+      &&  eval >= ss->static_score
+      &&  ss->static_score >= beta - Score(32 * depth / kOnePly) - 30 * improving + 120 * ttPv + 292
+      &&  excluded_move == kMoveNone
+      //&&  abs(beta) < kScoreMateInMaxPly) {
+      && (ss->ply >= this->nmpMinPly_ || us != this->nmpColor_)) {
+
     shared_.hash_table.Prefetch(node.key_after_null_move());
 
     ss->current_move = kMoveNull;
     ss->countermoves_history = nullptr;
+    ss->continuationHistory = &(*this->continuationHistory_)[0][0][SQ_ZERO][NO_PIECE];
+
     assert(eval - beta >= 0);
 
     // 削減する深さの決定
-    Depth R = 3 * kOnePly + depth / 4 + int(eval - beta) / 200 * kOnePly;
+    //Depth R = 3 * kOnePly + depth / 4 + int(eval - beta) / 200 * kOnePly;
+    Depth R = int(854 + 68 * (depth / kOnePly)) / 258 * kOnePly + std::min(int(eval - beta) / 192, 3) * kOnePly;
 
     node.MakeNullMove();
-    (ss+1)->skip_null_move = true;
+    //(ss+1)->skip_null_move = true;
     Score null_score = depth - R < kOnePly
         ? -QuiecenceSearch<kNonPvNode, false>(node, -beta, -beta+1, kDepthZero, ply+1)
         : -MainSearch<kNonPvNode>(node, -beta, -beta+1, depth-R, ply+1, !cut_node);
-    (ss+1)->skip_null_move = false;
+    //(ss+1)->skip_null_move = false;
     node.UnmakeNullMove();
 
     if (null_score >= beta) {
@@ -678,75 +838,132 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
       if (null_score >= kScoreMateInMaxPly) {
         null_score = beta;
       }
-      return null_score;
+
+      if (this->nmpMinPly_ || (abs(beta) < kScoreKnownWin && depth < 13 * kOnePly)) {
+        return null_score;
+      }
+
+      ASSERT_LV3(!this->nmpMinPly_); // Recursive verification is not allowed
+
+      // Do verification search at high depths, with null move pruning disabled
+      // for us, until ply exceeds nmpMinPly.
+      this->nmpMinPly_ = ss->ply + 3 * (depth - R) / kOnePly / 4;
+      this->nmpColor_ = us;
+
+      // nullMoveせずに(現在のnodeと同じ手番で)同じ深さで探索しなおして本当にbetaを超えるか検証する。cutNodeにしない。
+      Score v = MainSearch<kNonPvNode>(node, beta-1, beta, depth-R, ply+1, false);
+
+      this->nmpMinPly_ = 0;
+
+      if (v >= beta) {
+        return null_score;
+      }
     }
   }
+
+  // -----------------------
+  // Step 10. ProbCut : ~10 Elo
+  // -----------------------
 
   // ProbCut（王手がかかっている場合は、スキップされる）
   if (   !kIsPv
       && depth >= 5 * kOnePly
-      && !ss->skip_null_move
+      //&& !ss->skip_null_move
       && abs(beta) < kScoreMateInMaxPly) {
-    Score rbeta = std::min(beta + 200, kScoreInfinite);
+
+    //Score rbeta = std::min(beta + 200, kScoreInfinite);
+    Score rbeta = std::min(beta + 189 - 45 * improving, kScoreInfinite);
+
     Depth rdepth = depth - 4 * kOnePly;
 
     assert(rdepth >= kOnePly);
     assert((ss-1)->current_move.is_real_move());
 
-    MovePicker mp(node, history_, gains_, hash_move, rbeta - ss->static_score);
+    MovePicker mp(node, history_, gains_, hash_move, rbeta - ss->static_score, *this);
+
+    // 試行回数は3回までとする。(よさげな指し手を3つ試して駄目なら駄目という扱い)
+    // cf. Do move-count pruning in probcut : https://github.com/official-stockfish/Stockfish/commit/b87308692a434d6725da72bbbb38a38d3cac1d5f
+    int probCutCount = 0;
 
     double dummy;
-    for (Move move; (move = mp.NextMove(&dummy)) != kMoveNone;)
-      if (node.PseudoLegalMoveIsLegal(move)) {
+    //for (Move move; (move = mp.NextMove(&dummy)) != kMoveNone;)
+    for (Move move;
+              (move = mp.NextMove(&dummy)) != kMoveNone
+           && probCutCount < 2 + 2 * cut_node
+           && !(   move == hash_move
+                 && entry->depth() >= depth - 4 * kOnePly
+                 && hash_score < rbeta);) {
+      if (move != excluded_move && node.PseudoLegalMoveIsLegal(move)) {
         // Zobristハッシュキーを更新して、子局面の置換表をプリフェッチする
         Key64 key_after_move = node.key_after(move);
         shared_.hash_table.Prefetch(key_after_move);
 
+        captureOrPawnPromotion = move.is_capture();
+        probCutCount++;
+
         ss->current_move = move;
         ss->countermoves_history = shared_.countermoves_history[move];
+        ss->continuationHistory = &(*this->continuationHistory_)[ss->inCheck][captureOrPawnPromotion][move.to()][move.piece_after_move()];
 
         node.MakeMove(move, node.MoveGivesCheck(move), key_after_move);
-        Score score = -MainSearch<kNonPvNode>(node, -rbeta, -rbeta + 1, rdepth,
-                                              ply + 1, !cut_node);
+
+        // この指し手がよさげであることを確認するための予備的なqsearch
+        Score score = -QuiecenceSearch<kNonPvNode, false>(node, -rbeta, -rbeta + 1, kDepthZero, ply + 1);
+
+        if (score >= rbeta) {
+          score = -MainSearch<kNonPvNode>(node, -rbeta, -rbeta + 1, rdepth,
+                                                ply + 1, !cut_node);
+        }
+
         node.UnmakeMove(move);
 
         if (score >= rbeta) {
           return score;
         }
       }
+    }
   }
 
-  // 内部反復深化（王手がかかっている場合は、スキップされる）
-  if (   depth >= 6 * kOnePly
-      && hash_move == kMoveNone
-      && (kIsPv || ss->static_score + 256 >= beta)) {
-    Depth d = (depth * 3 / 4) - (2 * kOnePly);
+  // -----------------------
+  // Step 11. Internal iterative deepening : ~1 Elo
+  // -----------------------
 
-    ss->skip_null_move = true;
-    MainSearch<kIsPv ? kPvNode : kNonPvNode>(node, alpha, beta, d, ply, true);
-    ss->skip_null_move = false;
+  // 内部反復深化（王手がかかっている場合は、スキップされる）
+  if (   depth >= 7 * kOnePly
+      && hash_move == kMoveNone
+      //&& (kIsPv || ss->static_score + 256 >= beta)) {
+     ) {
+
+    //Depth d = (depth * 3 / 4) - (2 * kOnePly);
+    Depth d = depth - 7 * kOnePly;
+
+    //ss->skip_null_move = true;
+    MainSearch<kIsPv ? kPvNode : kNonPvNode>(node, alpha, beta, d, ply, cut_node);
+    //ss->skip_null_move = false;
 
     entry = shared_.hash_table.LookUp(pos_key);
     hash_move = entry ? entry->move() : kMoveNone;
+    hash_score = entry ? ScoreFromTt(entry->score(), ply) : kScoreNone;
   }
 
 moves_loop: // 王手がかかっている場合は、ここからスタートする
 
   const Array<Move, 2> countermoves = countermoves_[(ss-1)->current_move];
   const Array<Move, 2> followupmoves = followupmoves_[(ss-2)->current_move];
+
+  // contHist[0]  = Counter Move History    : ある指し手が指されたときの応手
+  // contHist[1]  = Follow up Move History  : 2手前の自分の指し手の継続手
+  // contHist[3]  = Follow up Move History2 : 4手前からの継続手
+  const PieceToHistory* contHist[] = { (ss - 1)->continuationHistory, (ss - 2)->continuationHistory,
+                                       nullptr                      , (ss - 4)->continuationHistory,
+                                       nullptr                      , (ss - 6)->continuationHistory };
+
+  Piece prevPc = node.piece_on(prevSq);
+  Move countermove = (*this->counterMoves_)[prevSq][prevPc];
+
   MovePicker move_picker(node, history_, gains_, depth, hash_move,
-                         ss->killers, countermoves, followupmoves, ss);
-
-  const bool improving =   ss->static_score >= (ss-2)->static_score
-                        || ss->static_score == kScoreNone
-                        ||(ss-2)->static_score == kScoreNone;
-
-  bool singular_extension_node =   !kIsRoot
-                                && depth >= 8 * kOnePly
-                                && hash_move != kMoveNone
-                                && excluded_move == kMoveNone // 再帰的シンギュラー探索は行わない
-                                && (entry->bound() & kBoundLower)
-                                && entry->depth() >= depth - 3 * kOnePly;
+                         //ss->killers, countermoves, followupmoves, ss);
+                         ss->killers, countermove, ss, *this, contHist, depth > 12 * kOnePly ? ply : kMaxPly);
 
   int move_count = 0;
   int searched_move_count = 0;
@@ -754,8 +971,26 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
   Array<Move, 64> quiets_searched;
   double probability = 0;
 
+  int capture_count = 0;
+  Array<Move, 32> captures_searched;
+
+  // moveCountによって枝刈りをするかのフラグ(quietの指し手を生成しない)
+  bool moveCountPruning = false;
+
+  bool singularLMR = false;
+  Score score = best_score;
+
+  // 置換表の指し手がcaptureOrPromotionであるか。
+  // 置換表の指し手がcaptureOrPromotionなら高い確率でこの指し手がベストなので、他の指し手を
+  // そんなに読まなくても大丈夫。なので、このnodeのすべての指し手のreductionを増やす。
+  bool ttCapture = (hash_move != kMoveNone) && hash_move.is_capture_or_pawn_promotion();
+
+  // -----------------------
+  // Step 12. Loop through moves
+  // -----------------------
+
   // βカットが生じるまで、順番に指し手を探索する
-  for (Move move; (move = move_picker.NextMove(&probability)) != kMoveNone;) {
+  for (Move move; (move = move_picker.NextMove(&probability, moveCountPruning)) != kMoveNone;) {
     assert(move.IsOk());
 
     // シンギュラー延長の探索において、除外されている手はスキップする
@@ -775,86 +1010,179 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
     // ルートノードにおいては、非合法手はすでにスキップされているはず。
     assert(!kIsRoot || node.PseudoLegalMoveIsLegal(move));
 
-    ++move_count;
+    ss->moveCount = ++move_count;
 
     if (kIsRoot && move_count == 1) {
       shared_.signals.first_move_completed = false; // 最善手の探索をまだ終えていない
     }
 
-    Depth ext = kDepthZero;
+    //Depth ext = kDepthZero;
+    Depth extension = kDepthZero;
+
     const bool move_is_quiet = move.is_quiet();
     const bool move_gives_check = node.MoveGivesCheck(move);
-    const bool move_count_pruning =    depth < 16 * kOnePly
-                                    && move_count >= futility_move_count(kIsPv, depth);
 
+    const Piece movedPiece = move.piece_after_move();
+    const Square movedSq = move.to();
+
+    captureOrPawnPromotion = move.is_capture();
+
+    // Calculate new depth for this move
+    Depth new_depth = depth - 1 * kOnePly;
+
+/*
     // 王手延長
     if (   move_gives_check
-        && !move_count_pruning) {
+        && !moveCountPruning) {
       ext = !Swap::IsLosing(move, node) ? kOnePly : (kOnePly / 2);
     }
+*/
 
-    // シンギュラー延長（突出して良い手が存在する場合に、その手を延長する）
-    if (   singular_extension_node
-        && move == hash_move
-        && !ext
-        && node.PseudoLegalMoveIsLegal(move)
-        && abs(hash_score) < kScoreKnownWin) {
-      assert(hash_score != kScoreNone);
+    // -----------------------
+    // Step 13. Pruning at shallow depth : ~200 Elo
+    // -----------------------
 
-      Score rbeta = hash_score - int(3 * depth / kOnePly);
+    // 浅い深さでの枝刈り
+    if (!kIsRoot
+      && best_score > kScoreMatedInMaxPly) {
+
+      // move countベースの枝刈りを実行するかどうかのフラグ
+      moveCountPruning = move_count >= futility_move_count(improving, depth);
+
+      // Reduced depth of the next LMR search
+      // 次のLMR探索における軽減された深さ
+      Depth lmrDepth = std::max(new_depth - reduction(improving, depth, move_count), kDepthZero);
+
+      if (   !captureOrPawnPromotion
+          && !move_gives_check) {
+
+        // Countermovesに基づいた枝刈り(historyの値が悪いものに関してはskip) : ~20 Elo
+        // 【計測資料 10.】historyに基づく枝刈りに、contHist[1],contHist[3]を利用するかどうか。
+        if (lmrDepth < (4 + ((ss - 1)->statScore > 0 || (ss - 1)->moveCount == 1)) * kOnePly
+          && ((*contHist[0])[movedSq][movedPiece] < CounterMovePruneThreshold)
+          && ((*contHist[1])[movedSq][movedPiece] < CounterMovePruneThreshold))
+          continue;
+
+        // Futility pruning: parent node : ~5 Elo
+        // 親nodeの時点で子nodeを展開する前にfutilityの対象となりそうなら枝刈りしてしまう。
+        if (lmrDepth < 6 * kOnePly
+          && !ss->inCheck
+          && ss->static_score + 235
+             + Score(172 * lmrDepth / kOnePly) <= alpha
+          &&  (*contHist[0])[movedSq][movedPiece]
+            + (*contHist[1])[movedSq][movedPiece]
+            + (*contHist[3])[movedSq][movedPiece] < 27400)
+          continue;
+
+        // Prune moves with negative SEE : ~20 Elo
+        // SEEが負の指し手を枝刈り
+        // 将棋ではseeが負の指し手もそのあと詰むような場合があるから、あまり無碍にも出来ないようだが…。
+        // 【計測資料 20.】SEEが負の指し手を枝刈りする/しない
+        if (!Swap::IsGreaterOrEqual(move, node, Score(-(32 - std::min(int(lmrDepth / kOnePly), 18)) * int(lmrDepth / kOnePly) * int(lmrDepth / kOnePly))))
+          continue;
+      }
+
+      // 浅い深さでの、危険な指し手を枝刈りする。
+      else {
+        // Capture history based pruning when the move doesn't give check
+        if (!move_gives_check
+          && lmrDepth < 1 * kOnePly
+          && (*this->captureHistory_)[movedSq][movedPiece][move.captured_piece_type()] < 0)
+          continue;
+
+        // See based pruning
+        // やねうら王の独自のコード。depthの2乗に比例したseeマージン。適用depthに制限なし。
+        // しかしdepthの2乗に比例しているのでdepth 10ぐらいから無意味かと..
+        // PARAM_FUTILITY_AT_PARENT_NODE_GAMMA2を少し大きめにして調整したほうがよさげ。
+        if (!Swap::IsGreaterOrEqual(move, node, Score(-51 * int(depth / kOnePly) * int(depth / kOnePly))))
+          continue;
+      }
+    }
+
+    // -----------------------
+    // Step 14. Singular and Gives Check Extensions. : ~75 Elo
+    // -----------------------
+    // singular延長と王手延長。
+
+    // Singular extension search : ~60 Elo
+    // singular延長をするnodeであるか。
+    if ( depth >= 6 * kOnePly
+      && move == hash_move
+      && !kIsRoot
+      && excluded_move == kMoveNone // 再帰的なsingular延長はすべきではない
+    /*  &&  ttValue != VALUE_NONE Already implicit in the next condition */
+      &&  abs(hash_score) < kScoreKnownWin
+      && (entry->bound() & kBoundLower)
+      &&  entry->depth() >= depth - 3 * kOnePly
+      &&  node.PseudoLegalMoveIsLegal(move)) {
+
+      // このmargin値は評価関数の性質に合わせて調整されるべき。
+      Score singularBeta = hash_score - ((formerPv + 4) * int(depth / kOnePly)) / 2;
+      Depth singularDepth = (int(depth / kOnePly) - 1 + 3 * formerPv) / 2 * kOnePly;
+
+      // ttMoveの指し手を以下のsearch()での探索から除外
       ss->excluded_move = move;
-      ss->skip_null_move = true;
-      Score score = MainSearch<kNonPvNode>(node, rbeta-1, rbeta, depth / 3, ply,
-                                           cut_node);
-      ss->skip_null_move = false;
+      //ss->skip_null_move = true;
+
+      // 局面はdo_move()で進めずにこのnodeから浅い探索深さで探索しなおす。
+      // 浅いdepthでnull windowなので、すぐに探索は終わるはず。
+      score = MainSearch<kNonPvNode>(node, singularBeta-1, singularBeta, singularDepth, ply, cut_node);
+
+      //ss->skip_null_move = false;
       ss->excluded_move = kMoveNone;
 
-      if (score < rbeta) {
-        ext = kOnePly;
+      // 置換表の指し手以外がすべてfail lowしているならsingular延長確定。
+      if (score < singularBeta)
+      {
+        extension = 1 * kOnePly;
+        singularLMR = true;
+      }
+
+      // Multi-cut pruning
+      else if (singularBeta >= beta)
+        return singularBeta;
+
+      // If the eval of ttMove is greater than beta we try also if there is an other move that
+      // pushes it over beta, if so also produce a cutoff
+      else if (hash_score >= beta)
+      {
+        ss->excluded_move = move;
+        //ss->skip_null_move = true;
+        score = MainSearch<kNonPvNode>(node, singularBeta - 1, singularBeta, (depth + 3 * kOnePly) / 2, ply, cut_node);
+        //ss->skip_null_move = false;
+        ss->excluded_move = kMoveNone;
+
+        if (score >= beta)
+          return beta;
       }
     }
 
-    const Depth new_depth = depth - kOnePly + ext;
+    // 王手延長 : ~2 Elo
+    // 王手となる指し手でSEE >= 0であれば残り探索深さに1手分だけ足す。
+    // また、moveCountPruningでない指し手(置換表の指し手とか)も延長対象。
+    // これはYSSの0.5手延長に似たもの。
+    // ※　将棋においてはこれはやりすぎの可能性も..
+    else if (   move_gives_check
+             && !Swap::IsLosing(move, node))
+      extension = 1 * kOnePly;
 
-    // 高速に判定できるが、荒っぽい枝刈り
-    if (   !kIsRoot
-        && (!kIsPv || !learning_mode_)
-        && move_is_quiet
-        && !in_check
-        && !move_gives_check
-     /* && move != ttMove Already implicit in the next condition */
-        && best_score > kScoreMatedInMaxPly) {
+    // -----------------------
+    //   1手進める前の枝刈り
+    // -----------------------
 
-      // Move count based pruning
-      if (   move_count_pruning
-          && gains_[move] < kScoreZero
-          && history_.HasNegativeScore(move)) {
-        continue;
-      }
+    // 再帰的にsearchを呼び出すとき、search関数に渡す残り探索深さ。
+    // これはsingluar extensionの探索が終わってから決めなければならない。(singularなら延長したいので)
+    new_depth += extension;
 
-      Depth r = reduction<kIsPv>(improving, depth, move_count);
-      Depth predicted_depth = new_depth - r;
-
-      // futility pruning
-      if (predicted_depth < 7 * kOnePly) {
-        Score futility_score = ss->static_score + futility_margin(predicted_depth, progress)
-                               + 128 + gains_[move];
-        if (futility_score <= alpha) {
-          best_score = std::max(best_score, futility_score);
-          continue;
-        }
-      }
-
-      // SEEが負の手を枝刈りする
-      if (depth < 4 * kOnePly && Swap::IsLosing(move, node)) {
-        continue;
-      }
-    }
+    // -----------------------
+    //      1手進める
+    // -----------------------
 
     // 合法手か否かをチェックする
     if (   !kIsRoot
         && !node.PseudoLegalMoveIsLegal(move)) {
-      move_count--;
+      // 足してしまったmoveCountを元に戻す。
+      ss->moveCount = --move_count;
       continue;
     }
 
@@ -863,17 +1191,30 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
     shared_.hash_table.Prefetch(key_after_move);
 
     const bool is_pv_move = kIsPv && move_count == 1;
+
+    // 現在このスレッドで探索している指し手を保存しておく。
     ss->current_move = move;
     ss->countermoves_history = shared_.countermoves_history[move];
-    if (move_is_quiet && quiet_count < 64) {
-      quiets_searched[quiet_count++] = move;
-    }
+    ss->continuationHistory = &(*this->continuationHistory_)[ss->inCheck][captureOrPawnPromotion][movedSq][movedPiece];
+
+    //if (move_is_quiet && quiet_count < 64) {
+    //  quiets_searched[quiet_count++] = move;
+    //}
+
     uint64_t nodes_before_search = num_nodes_searched_;
+
+    // -----------------------
+    // Step 15. Make the move
+    // -----------------------
 
     // 指し手に沿って局面を進める
     node.MakeMove(move, move_gives_check, key_after_move);
-    Score score = kScoreNone;
-    bool do_full_depth_search = !is_pv_move;
+    //Score score = kScoreNone;
+
+    //bool do_full_depth_search = !is_pv_move;
+    bool do_full_depth_search;
+
+    bool didLMR;
 
     // 子ノードのPVをリセットする
     // 注意：ここでちゃんとリセットしておかないと、マルチスレッド探索時にPVがおかしくなる
@@ -881,15 +1222,24 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
       pv_table_.ClosePv(ply + 1);
     }
 
+    // -----------------------
+    // Step 16. Reduced depth search (LMR).
+    // -----------------------
+
+    Depth reduction_depth = kDepthZero;
+
     // 実現確率 及び LMR（Late Move Reduction）
     // 一定以上の残り深さがあれば実現確率を、そうでなければLMRを用いる。
     // 本当はすべて実現確率にしたいところだが、実現確率の計算コストが高いため、残り深さが大きい
     // ところに限って実現確率を用いている
-    if (   depth >= 3 * kOnePly
-        && (move_is_quiet || depth >= MoveProbability::kAppliedDepth)
-        && move_count >= 2
-        && move != ss->killers[0]
-        && move != ss->killers[1]) {
+    // TODO depth >= MoveProbability::kAppliedDepth
+    if (depth >= 3 * kOnePly
+      && move_count > 1 + 2 * kIsRoot
+      && (!captureOrPawnPromotion
+        || moveCountPruning
+        || ss->static_score + Material::exchange_value(move.captured_piece_type()) <= alpha
+        || cut_node
+        || this->ttHitAverage_ < 375 * ttHitAverageResolution * ttHitAverageWindow / 1024)) {
 
       // 実現確率
       if (depth >= MoveProbability::kAppliedDepth) {
@@ -899,67 +1249,168 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
         double reduction = std::min(consumption - 1.0, kIsPv ? 4.5 : 6.0);
         // Reductionが１手未満の場合は、ほとんど減らす意味が無いので、通常の深さで探索する
         if (reduction < 1.0) {
-          ss->reduction = kDepthZero;
+          reduction_depth = kDepthZero;
         } else {
-          ss->reduction = static_cast<Depth>(reduction * double(kOnePly));
+          reduction_depth = static_cast<Depth>(reduction * double(kOnePly));
         }
 
       // LMR
       } else {
-        assert(move.is_quiet());
+        //assert(move.is_quiet());
+        reduction_depth = reduction(improving, depth, move_count);
+      }
 
-        ss->reduction = reduction<kIsPv>(improving, depth, move_count);
+      // Decrease reduction if the ttHit running average is large
+      if (this->ttHitAverage_ > 500 * ttHitAverageResolution * ttHitAverageWindow / 1024)
+        reduction_depth -= kOnePly;
 
-        if (!kIsPv && cut_node) {
-          ss->reduction += kOnePly;
-        } else if (history_.HasNegativeScore(move)) {
-          ss->reduction += kOnePly / 2;
-        }
+#if 0
+      // TODO th.marked()
+      // Reduction if other threads are searching this position.
+      if (th.marked())
+        reduction_depth += 1 * kOnePly;
+#endif
+
+      // Decrease reduction if position is or has been on the PV
+      if (ttPv)
+        reduction_depth -= 2 * kOnePly;
+
+      if (moveCountPruning && !formerPv)
+        reduction_depth += 1 * kOnePly;
+
+      // Decrease reduction if opponent's move count is high (~10 Elo)
+      if ((ss - 1)->moveCount > 14)
+        reduction_depth -= 1 * kOnePly;
+
+      // Decrease reduction if ttMove has been singularly extended
+      if (singularLMR)
+        reduction_depth -= (1 + formerPv) * kOnePly;
+
+      if (!captureOrPawnPromotion) // ~5 Elo
+      {
+        // 置換表の指し手がcaptureOrPawnPromotionであるなら、
+        // このnodeはそんなに読まなくとも大丈夫。
+
+        // ~0 Elo
+        if (ttCapture)
+          reduction_depth += 1 * kOnePly;
+
+        // cut nodeにおいてhistoryの値が悪い指し手に対してはreduction量を増やす。
+        // ※　PVnodeではIID時でもcutNode == trueでは呼ばないことにしたので、
+        // if (cutNode)という条件式は暗黙に && !PvNode を含む。
+
+        // ~5 Elo
+        if (cut_node)
+          reduction_depth += 2 * kOnePly;
+
+        // 【計測資料 11.】statScoreの計算でcontHist[3]も調べるかどうか。
+        ss->statScore = (*this->mainHistory_)[move.from_to()][us]
+          + (*contHist[0])[movedSq][movedPiece]
+          + (*contHist[1])[movedSq][movedPiece]
+          + (*contHist[3])[movedSq][movedPiece]
+          - 4926; // 修正項
+
+        // historyの値に応じて指し手のreduction量を増減する。
+
+        // ~ 10 Elo
+        if (ss->statScore >= -102 && (ss - 1)->statScore < -114)
+          reduction_depth -= 1 * kOnePly;
+
+        else if ((ss - 1)->statScore >= -116 && ss->statScore < -154)
+          reduction_depth += 1 * kOnePly;
+
+        // ~30 Elo
+        reduction_depth -= ss->statScore / 16434 * kOnePly;
+      }
+      else
+      {
+        // Increase reduction for captures/promotions if late move and at low depth
+        if (depth < 8 * kOnePly && move_count > 2)
+          reduction_depth += 1 * kOnePly;
+
+        // Unless giving check, this capture is likely bad
+        if (!move_gives_check
+            && ss->static_score + Material::exchange_value(move.captured_piece_type()) + 200 * int(depth / kOnePly) <= alpha)
+          reduction_depth += 1 * kOnePly;
       }
 
       // カウンター手は、少しreductionを抑えめにする
-      if (move == countermoves[0] || move == countermoves[1]) {
-        ss->reduction = std::max(kDepthZero, ss->reduction - kOnePly);
-      }
+      //if (move == countermoves[0] || move == countermoves[1]) {
+      //  reduction_depth = std::max(kDepthZero, reduction_depth - kOnePly);
+      //}
 
-      Depth d = std::max(new_depth - ss->reduction, kOnePly);
-
+      // depth >= 3なのでqsearchは呼ばれないし、かつ、
+      // moveCount > 1 すなわち、このnodeの2手目以降なのでsearch<NonPv>が呼び出されるべき。
+      Depth d = Math::clamp(new_depth - reduction_depth, 1 * kOnePly, new_depth);
       score = -MainSearch<kNonPvNode>(node, -(alpha+1), -alpha, d, ply+1, true);
 
-      // 削減深さが大きい場合には、中間的な深さで再探索する
-      if (score > alpha && ss->reduction >= 4 * kOnePly) {
-        Depth d2 = std::max(new_depth - 2 * kOnePly, kOnePly);
-        score = -MainSearch<kNonPvNode>(node, -(alpha+1), -alpha, d2, ply+1, true);
-      }
-
-      do_full_depth_search = (score > alpha && ss->reduction != kDepthZero);
-      ss->reduction = kDepthZero;
+      // 上の探索によりalphaを更新しそうだが、いい加減な探索なので信頼できない。まともな探索で検証しなおす。
+      do_full_depth_search = (score > alpha) && (d != new_depth);
+      didLMR = true;
+    }
+    else
+    {
+      // non PVか、PVでも2手目以降であればfull depth searchを行なう。
+      do_full_depth_search = !kIsPv || move_count > 1;
+      didLMR = false;
     }
 
+    // -----------------------
+    // Step 17. Full depth search when LMR is skipped or fails high
+    // -----------------------
+
+    // Full depth search。LMRがskipされたか、LMRにおいてfail highを起こしたなら元の探索深さで探索する。
+
+    // ※　静止探索は残り探索深さはDEPTH_ZEROとして開始されるべきである。(端数があるとややこしいため)
     // 浅い探索でfail-highした場合は、通常の深さで再探索する
-    if (do_full_depth_search) {
+    if (do_full_depth_search)
+    {
       score = new_depth < kOnePly
             ? -QuiecenceSearch<kNonPvNode>(node, -(alpha+1), -alpha, kDepthZero, ply+1)
             : -MainSearch<kNonPvNode>(node, -(alpha+1), -alpha, new_depth, ply+1, !cut_node);
+
+      if (didLMR && !captureOrPawnPromotion)
+      {
+        int bonus = score > alpha ?  stat_bonus(new_depth)
+                                  : -stat_bonus(new_depth);
+
+        if (move == ss->killers[0])
+          bonus += bonus / 4;
+
+        update_continuation_histories(ss, movedPiece, move.to(), bonus);
+      }
     }
 
+    // PV nodeにおいては、full depth searchがfail highしたならPV nodeとしてsearchしなおす。
+    // ただし、value >= betaなら、正確な値を求めることにはあまり意味がないので、これはせずにbeta cutしてしまう。
     // PVノードにおいて、α値を更新しそうな場合は、full-windowで再探索する
-    if (kIsPv && (is_pv_move || (score > alpha && (kIsRoot || score < beta)))) {
+    if (kIsPv && (move_count == 1 || (score > alpha && (kIsRoot || score < beta)))) {
       score = new_depth < kOnePly
             ? -QuiecenceSearch<kPvNode>(node, -beta, -alpha, kDepthZero, ply+1)
             : -MainSearch<kPvNode>(node, -beta, -alpha, new_depth, ply+1, false);
     }
+
+    // -----------------------
+    // Step 18. Undo move
+    // -----------------------
 
     // １手前の局面に戻す
     ++searched_move_count;
     node.UnmakeMove(move);
     assert(-kScoreInfinite < score && score < kScoreInfinite);
 
+    // -----------------------
+    // Step 19. Check for a new best move
+    // -----------------------
+
     // USIのstopコマンドを受信するか、ノード数・深さの制限に達したら、探索を打ち切る
     if (shared_.signals.stop || shared_.signals.limit_reached) {
       return kScoreZero;
     }
 
+    // -----------------------
+    //  root node用の特別な処理
+    // -----------------------
     if (kIsRoot) {
       auto& root_moves = root_moves_;
       RootMove& rm = *std::find(root_moves.begin(), root_moves.end(), move);
@@ -981,6 +1432,9 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
       rm.nodes += (num_nodes_searched_ - nodes_before_search); // この手の探索に用いたノード数
     }
 
+    // -----------------------
+    //  alpha値の更新処理
+    // -----------------------
     if (score > best_score) {
       best_score = score;
 
@@ -1001,11 +1455,29 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
             g_num_beta_cuts += 1;
             g_cuts_by_move[std::min(63, searched_move_count)] += 1;
           }
+          ss->statScore = 0;
           break;
         }
       }
     }
+
+    if (move != best_move)
+    {
+      // 探索した駒を捕獲する指し手を32手目まで
+      if (captureOrPawnPromotion && capture_count < 32)
+        captures_searched[capture_count++] = move;
+
+      //if (move_is_quiet && quiet_count < 64) {
+      if (!captureOrPawnPromotion && quiet_count < 64) {
+        quiets_searched[quiet_count++] = move;
+      }
+    }
+
   }
+
+  // -----------------------
+  // Step 20. Check for mate and stalemate
+  // -----------------------
 
   // 現局面が詰みでないか
   if (move_count == 0) {
@@ -1018,16 +1490,31 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
         best_score = score_mated_in(ply); // 詰まされた
       }
     }
-  } else if (best_score >= beta && best_move.is_quiet() && !in_check) {
-    // 最善手が静かな手の場合は、キラー手等を更新する
-    UpdateStats(ss, best_move, depth, quiets_searched.begin(), quiet_count - 1);
   }
 
-  shared_.hash_table.Save(pos_key, best_move, ScoreToTt(best_score, ply), depth,
-                          best_score >= beta              ? kBoundLower :
-                          kIsPv && best_move != kMoveNone ? kBoundExact : kBoundUpper,
-                          ss->static_score,
-                          mate3_tried || best_score >= kScoreMateInMaxPly);
+  else if (best_move != kMoveNone) {
+    if (best_score >= beta && best_move.is_quiet() && !in_check) {
+      // 最善手が静かな手の場合は、キラー手等を更新する
+      UpdateStats(ss, best_move, depth, quiets_searched.begin(), quiet_count - 1);
+    }
+
+    update_all_stats(node, ss, best_move, best_score, beta, prevSq,
+                     quiets_searched.begin(), quiet_count, captures_searched.begin(), capture_count, depth);
+  }
+  else if ((depth >= 3 * kOnePly || kIsPv) && !priorCapture) {
+    update_continuation_histories(ss - 1, node.piece_on(prevSq), prevSq, stat_bonus(depth));
+  }
+
+  // -----------------------
+  //  置換表に保存する
+  // -----------------------
+  if (excluded_move == kMoveNone && !kIsRoot) {
+    shared_.hash_table.Save(pos_key, best_move, ScoreToTt(best_score, ply), depth,
+                            best_score >= beta              ? kBoundLower :
+                            kIsPv && best_move != kMoveNone ? kBoundExact : kBoundUpper,
+                            ss->static_score,
+                            mate3_tried || best_score >= kScoreMateInMaxPly, ttPv);
+  }
 
   assert(-kScoreInfinite < best_score && best_score < kScoreInfinite);
   return best_score;
@@ -1048,6 +1535,12 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
   ++num_nodes_searched_;
   Stack* const ss = search_stack_at_ply(ply);
   const Key64 pos_key = node.key();
+
+  ss->inCheck = kInCheck;
+  ss->ply = ply;
+  (ss+1)->ply = ss->ply + 1;
+
+  bool captureOrPawnPromotion;
 
   if (kIsPv) {
     pv_table_.ClosePv(ply);
@@ -1075,14 +1568,16 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
   const Depth hash_depth = kInCheck || depth > MovePicker::kDepthQsNoChecks
                          ? MovePicker::kDepthQsChecks
                          : MovePicker::kDepthQsNoChecks;
+  bool pvHit = tte && tte->is_pv();
 
   // Hash Cut
-  if (   tte != nullptr
+  if (   !kIsPv
+      && tte != nullptr
       && !learning_mode_
       && tte->depth() >= hash_depth
       && hash_score != kScoreNone // Only in case of TT access race
       && HashCutOk<kIsPv>(tte->bound(), hash_score, beta)) {
-    ss->current_move = hash_move; // Can be MOVE_NONE
+    //ss->current_move = hash_move; // Can be MOVE_NONE
     return hash_score;
   }
 
@@ -1101,7 +1596,7 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
       Score score = score_mate_in(ply + 1);
       shared_.hash_table.Save(pos_key, ss->current_move,
                       ScoreToTt(score, ply), kDepthZero, kBoundExact,
-                      ss->static_score, true);
+                      ss->static_score, true, kIsPv);
       return score;
     }
 
@@ -1122,7 +1617,7 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
     if (best_score >= beta) {
       if (tte == nullptr) {
         shared_.hash_table.Save(pos_key, kMoveNone, ScoreToTt(best_score, ply),
-                                kDepthNone, kBoundLower, ss->static_score, false);
+                                kDepthNone, kBoundLower, ss->static_score, false, kIsPv);
       }
       return best_score;
     }
@@ -1132,12 +1627,16 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
       alpha = best_score;
     }
 
-    futility_base = best_score + 128;
+    futility_base = best_score + 154;
   }
   assert(0.0 <= progress && progress <= 1.0);
 
+  const PieceToHistory* contHist[] = { (ss - 1)->continuationHistory, (ss - 2)->continuationHistory,
+                                       nullptr                      , (ss - 4)->continuationHistory,
+                                       nullptr                      , (ss - 6)->continuationHistory };
+
   // MovePickerオブジェクトを更新する
-  MovePicker mp(node, history_, gains_, depth, hash_move);
+  MovePicker mp(node, history_, gains_, depth, hash_move, *this, contHist);
   Move best_move = kMoveNone;
 
   // βカットするか、残りの手がなくなるまで、探索する
@@ -1146,12 +1645,12 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
     assert(move.IsOk());
 
     const bool move_gives_check = node.MoveGivesCheck(move);
+    captureOrPawnPromotion = move.is_capture();
 
     // Futility pruning
-    if (   !kIsPv
-        && !kInCheck
+    if (   !kInCheck
         && !move_gives_check
-        &&  move != hash_move
+        //&&  move != hash_move
         &&  futility_base > -kScoreKnownWin) {
       Score futility_score = futility_base
           + Material::exchange_value(move.captured_piece_type());
@@ -1159,25 +1658,26 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
         futility_score += Material::promotion_value(move.piece_type());
       }
 
-      if (futility_score < beta) {
+      if (futility_score <= alpha) {
         best_score = std::max(best_score, futility_score);
         continue;
       }
 
-      if (futility_base < beta && !Swap::IsWinning(move, node)) {
+      if (futility_base <= alpha && !Swap::IsWinning(move, node)) {
         best_score = std::max(best_score, futility_base);
         continue;
       }
     }
 
     // 枝刈りしてもよい王手回避手を検出する
-    const bool evasion_prunable =    kInCheck
-                                  && best_score > kScoreMatedInMaxPly
-                                  && !move.is_capture();
+    //const bool evasion_prunable =    kInCheck
+    //                              && best_score > kScoreMatedInMaxPly
+    //                              && !move.is_capture();
 
     // SEEが負の手は枝刈りする
-    if (   (!kInCheck || evasion_prunable)
-        && move != hash_move
+    //if (   (!kInCheck || evasion_prunable)
+    if (   !kInCheck
+        //&& move != hash_move
         && Swap::IsLosing(move, node)) {
       continue;
     }
@@ -1188,6 +1688,7 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
     }
 
     ss->current_move = move;
+    ss->continuationHistory = &(*this->continuationHistory_)[ss->inCheck][captureOrPawnPromotion][move.to()][move.piece_after_move()];
 
     // Zobristハッシュキーを更新して、子局面の置換表をプリフェッチする
     Key64 key_after_move = node.key_after(move);
@@ -1206,19 +1707,22 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
     if (score > best_score) {
       best_score = score;
       if (score > alpha) {
+        best_move = move;
+
         if (kIsPv) {
           pv_table_.CopyPv(move, ply);
         }
 
         if (kIsPv && score < beta) {
           alpha = score;
-          best_move = move;
+          //best_move = move;
         } else {
           // fail high
-          shared_.hash_table.Save(pos_key, move, ScoreToTt(score, ply), hash_depth,
-                                  kBoundLower, ss->static_score,
-                                  score >= kScoreMateInMaxPly);
-          return score;
+          //shared_.hash_table.Save(pos_key, move, ScoreToTt(score, ply), hash_depth,
+          //                        kBoundLower, ss->static_score,
+          //                        score >= kScoreMateInMaxPly);
+          //return score;
+          break;
         }
       }
     }
@@ -1245,7 +1749,7 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
       Score score = score_mate_in(ply + m3result.mate_distance);
       ss->current_move = m3result.mate_move;
       shared_.hash_table.Save(pos_key, ss->current_move, ScoreToTt(score, ply),
-                      kDepthZero, kBoundExact, ss->static_score, true);
+                      kDepthZero, kBoundExact, ss->static_score, true, kIsPv);
       return score;
     } else {
       g_mate3_nodes += node.nodes_searched() - m3nodes;
@@ -1254,7 +1758,7 @@ Score Search::QuiecenceSearch(Node& node, Score alpha, Score beta,
 
   shared_.hash_table.Save(pos_key, best_move, ScoreToTt(best_score, ply), hash_depth,
                           kIsPv && best_score > old_alpha ? kBoundExact : kBoundUpper,
-                          ss->static_score, true);
+                          ss->static_score, false, pvHit);
 
   assert(-kScoreInfinite < best_score && best_score < kScoreInfinite);
   return best_score;
@@ -1269,10 +1773,12 @@ void Search::UpdateStats(Stack* const ss, Move move, Depth depth,
   HistoryStats* followupmoves_history = (ss-2)->countermoves_history;
 
   // 1. キラー手を更新する
+/*
   if (ss->killers[0] != move) {
     ss->killers[1] = ss->killers[0];
     ss->killers[0] = move;
   }
+*/
 
   // 2. βカットした手のヒストリー値を加点する
   history_.UpdateSuccess(move, depth);
@@ -1302,6 +1808,82 @@ void Search::UpdateStats(Stack* const ss, Move move, Depth depth,
   if (   (ss-2)->current_move.is_real_move()
       && (ss-1)->current_move == (ss-1)->hash_move) {
     followupmoves_.Update((ss-2)->current_move, move);
+  }
+}
+
+void Search::update_all_stats(const Node& pos, Stack* ss, Move bestMove, Score bestValue, Score beta, Square prevSq,
+                              Move* quietsSearched, int quietCount, Move* capturesSearched, int captureCount, Depth depth) {
+  int bonus1, bonus2;
+  Color us = pos.side_to_move();
+  CapturePieceToHistory& captureHistory = *(this->captureHistory_);
+
+  bonus1 = stat_bonus(depth + 1 * kOnePly);
+  bonus2 = bestValue > beta + 128 /*PawnValueMg*/
+         ? bonus1                 // larger bonus
+         : stat_bonus(depth);     // smaller bonus
+
+  if (!bestMove.is_capture_or_promotion()) {
+    update_quiet_stats(pos, ss, bestMove, bonus2, depth);
+
+    // Decrease all the non-best quiet moves
+    for (int i = 0; i < quietCount; ++i) {
+      Move move = quietsSearched[i];
+      (*this->mainHistory_)[move.from_to()][us] << -bonus2;
+      update_continuation_histories(ss, move.piece_after_move(), move.to(), -bonus2);
+    }
+  }
+  else {
+    captureHistory[bestMove.to()][bestMove.piece_after_move()][bestMove.captured_piece_type()] << bonus1;
+  }
+
+  // Extra penalty for a quiet TT or main killer move in previous ply when it gets refuted
+  if (((ss - 1)->moveCount == 1 || ((ss - 1)->current_move == (ss - 1)->killers[0]))
+    && !pos.last_move().is_capture()) {
+    update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq, -bonus1);
+  }
+
+  // Decrease all the non-best capture moves
+  for (int i = 0; i < captureCount; ++i)
+  {
+    Move move = capturesSearched[i];
+    captureHistory[move.to()][move.piece_after_move()][move.captured_piece_type()] << -bonus1;
+  }
+}
+
+void Search::update_continuation_histories(Stack* ss, Piece pc, Square to, int bonus) {
+
+  for (int i : {1, 2, 4, 6})
+  {
+    if (ss->inCheck && i > 2)
+      break;
+
+    if ((ss - i)->current_move.is_real_move()) {
+      (*(ss - i)->continuationHistory)[to][pc] << bonus;
+    }
+  }
+}
+
+void Search::update_quiet_stats(const Node& pos, Stack* ss, Move move, int bonus, Depth depth) {
+
+  // キラー手を更新する
+  if (ss->killers[0] != move) {
+    ss->killers[1] = ss->killers[0];
+    ss->killers[0] = move;
+  }
+
+  Color us = pos.side_to_move();
+
+  // historyのupdate
+  (*this->mainHistory_)[move.from_to()][us] << bonus;
+  update_continuation_histories(ss, move.piece_after_move(), move.to(), bonus);
+
+  if ((ss - 1)->current_move.is_real_move()) {
+    Move m = (ss - 1)->current_move;
+    (*this->counterMoves_)[m.to()][m.piece_after_move()] = move;
+  }
+
+  if (depth > 12 * kOnePly && ss->ply < MAX_LPH) {
+    (*this->lowPlyHistory_)[ss->ply][move.from_to()] << stat_bonus(depth - 7);
   }
 }
 

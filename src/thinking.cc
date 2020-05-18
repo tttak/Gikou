@@ -29,6 +29,15 @@
 #include "usi.h"
 #include "usi_protocol.h"
 
+// やねうら王（Stockfish11）のHistory
+// ・本来はThreadに持つべき
+extern CounterMoveHistory g_ary_counterMoves[HISTORY_ARRAY_SIZE];
+extern ButterflyHistory g_ary_mainHistory[HISTORY_ARRAY_SIZE];
+extern LowPlyHistory g_ary_lowPlyHistory[HISTORY_ARRAY_SIZE];
+extern CapturePieceToHistory g_ary_captureHistory[HISTORY_ARRAY_SIZE];
+extern ContinuationHistory g_ary_continuationHistory[HISTORY_ARRAY_SIZE][2][2];
+
+
 Thinking::Thinking(const UsiOptions& usi_options)
     : usi_options_(usi_options),
       time_manager_(usi_options, &shared_data_.signals),
@@ -40,6 +49,26 @@ void Thinking::Initialize() {
   shared_data_.hash_table.SetSize(usi_options_["USI_Hash"]);
   shared_data_.countermoves_history.Clear();
   MoveProbability::SetCacheTableSize(ProbabilityCacheTable::kDefaultSize * usi_options_["Threads"]);
+
+  // やねうら王（Stockfish11）のHistoryのクリア
+  for (int i = 0; i < HISTORY_ARRAY_SIZE; i++) {
+    g_ary_counterMoves[i].fill(Move::Create(0));
+    g_ary_mainHistory[i].fill(0);
+    g_ary_lowPlyHistory[i].fill(0);
+    g_ary_captureHistory[i].fill(0);
+
+    // ここは、未初期化のときに[SQ_ZERO][NO_PIECE]を指すので、ここを-1で初期化しておくことによって、
+    // history > 0 を条件にすれば自ずと未初期化のときは除外されるようになる。
+    for (bool inCheck : { false, true })
+      for (StatsType c : { NoCaptures, Captures })
+      {
+        for (auto& to : g_ary_continuationHistory[i][inCheck][c])
+          for (auto& h : to)
+            h->fill(0);
+        g_ary_continuationHistory[i][inCheck][c][SQ_ZERO][NO_PIECE]->fill(CounterMovePruneThreshold - 1);
+      }
+  }
+
 }
 
 void Thinking::StartNewGame() {

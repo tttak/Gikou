@@ -72,20 +72,26 @@ inline Score GetMvvLvaScore(Move move) {
 
 } // namespace
 
+// 通常探索用のコンストラクタ
 MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
                        const GainsStats& gains, Depth depth, Move hash_move,
                        const Array<Move, 2>& killermoves,
-                       const Array<Move, 2>& countermoves,
-                       const Array<Move, 2>& followupmoves,
-                       Search::Stack* const ss)
+                       //const Array<Move, 2>& countermoves,
+                       //const Array<Move, 2>& followupmoves,
+                       const Move cm,
+                       Search::Stack* const ss, const Search& search, const PieceToHistory** ch, int ply)
     : pos_(pos),
       history_(history),
       gains_(gains),
       ss_(ss),
       depth_(depth),
-      killermoves_(killermoves),
-      countermoves_(countermoves),
-      followupmoves_(followupmoves) {
+      //killermoves_(killermoves),
+      //countermoves_(countermoves),
+      //followupmoves_(followupmoves),
+      refutations_{ { killermoves[0], 0 },{ killermoves[1], 0 },{ cm, 0 } },
+      search_(search),
+      continuationHistory_(ch),
+      ply_(ply) {
   assert(hash_move.IsOk());
   assert(depth > kDepthZero);
   assert(ss != nullptr);
@@ -111,12 +117,16 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
   }
 }
 
+// 静止探索用のコンストラクタ
 MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
-                       const GainsStats& gains, Depth depth, Move hash_move)
+                       const GainsStats& gains, Depth depth, Move hash_move, const Search& search, const PieceToHistory** ch)
     : pos_(pos),
       history_(history),
       gains_(gains),
-      depth_(depth) {
+      depth_(depth),
+      search_(search),
+      continuationHistory_(ch) {
+
   assert(hash_move.IsOk());
   assert(depth <= kDepthZero);
 
@@ -146,13 +156,15 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
   }
 }
 
+// ProbCut用のコンストラクタ
 MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
                        const GainsStats& gains, Move hash_move,
-                       Score capture_threshold)
+                       Score capture_threshold, const Search& search)
     : pos_(pos),
       history_(history),
       gains_(gains),
-      stage_(kProbCut) {
+      stage_(kProbCut),
+      search_(search) {
   // ポインタを初期化する
   cur_ = moves_.begin();
   end_ = moves_.begin();
@@ -164,17 +176,18 @@ MovePicker::MovePicker(const Position& pos, const HistoryStats& history,
   if (   hash_move != kMoveNone
       && pos.MoveIsPseudoLegal(hash_move)
       && hash_move.is_capture()
-      && Swap::Evaluate(hash_move, pos) > capture_threshold_) {
+      //&& Swap::Evaluate(hash_move, pos) > capture_threshold_) {
+      && Swap::IsGreaterOrEqual(hash_move, pos, capture_threshold_)) {
     hash_move_ = hash_move;
     ++end_;
   }
 }
 
-Move MovePicker::NextMove(double* const probability) {
+Move MovePicker::NextMove(double* const probability, bool skipQuiets) {
   while (true) {
     // スタックに指し手がなければ、次のカテゴリの指し手を生成する
     while (cur_ == end_) {
-      GenerateNext();
+      GenerateNext(skipQuiets);
     }
     Move move;
     switch (stage_) {
@@ -203,7 +216,8 @@ Move MovePicker::NextMove(double* const probability) {
       case kCaptures1:
         move = PickBest(cur_++, end_)->move;
         if (move != hash_move_) {
-          if (!Swap::IsLosing(move, pos_)) {
+          //if (!Swap::IsLosing(move, pos_)) {
+          if (Swap::IsGreaterOrEqual(move, pos_, Score(-55 * cur_->score / 1024))) {
             return move;
           } else {
             (end_bad_captures_--)->move = move;
@@ -225,12 +239,15 @@ Move MovePicker::NextMove(double* const probability) {
       case kQuiets1:
         move = (cur_++)->move;
         if (   move != hash_move_
-            && move != killers_[0].move
-            && move != killers_[1].move
-            && move != killers_[2].move
-            && move != killers_[3].move
-            && move != killers_[4].move
-            && move != killers_[5].move) {
+            //&& move != killers_[0].move
+            //&& move != killers_[1].move
+            //&& move != killers_[2].move
+            //&& move != killers_[3].move
+            //&& move != killers_[4].move
+            //&& move != killers_[5].move) {
+            && move != refutations_[0].move
+            && move != refutations_[1].move
+            && move != refutations_[2].move) {
           return move;
         }
         break;
@@ -253,7 +270,8 @@ Move MovePicker::NextMove(double* const probability) {
       case kCaptures6:
         move = PickBest(cur_++, end_)->move;
         if (   move != hash_move_
-            && Swap::Evaluate(move, pos_) > capture_threshold_) {
+            //&& Swap::Evaluate(move, pos_) > capture_threshold_) {
+            && Swap::IsGreaterOrEqual(move, pos_, capture_threshold_)) {
           return move;
         }
         break;
@@ -280,48 +298,82 @@ Move MovePicker::NextMove(double* const probability) {
 
 template<>
 void MovePicker::ScoreMoves<kCaptures>() {
+  const CapturePieceToHistory* captureHistory = search_.captureHistory_;
+
   for (ExtMove* it = moves_.begin(); it != end_; ++it) {
     Move move = it->move;
     it->score = GetMvvLvaScore(move);
     if (move.is_promotion()) {
       it->score += Material::promotion_value(move.piece_type());
     }
+    it->score = it->score * 6
+              + (*captureHistory)[move.to()][move.piece_after_move()][move.captured_piece_type()];
   }
 }
 
 template<>
 void MovePicker::ScoreMoves<kQuiets>() {
-  HistoryStats* cmh = (ss_-1)->countermoves_history;
-  HistoryStats* fmh = (ss_-2)->countermoves_history;
+  const ButterflyHistory* mainHistory = search_.mainHistory_;
+  const LowPlyHistory* lowPlyHistory = search_.lowPlyHistory_;
+  Color c = pos_.side_to_move();
+
   for (ExtMove* it = moves_.begin(); it != end_; ++it) {
     Move move = it->move;
-    if (cmh != nullptr) {
-      it->score = history_[move] + (*cmh)[move];
-    } else if (fmh != nullptr) {
-      it->score = history_[move] + (*fmh)[move];
-    } else {
-      it->score = history_[move];
-    }
+
+    Square movedSq = move.to();
+    Piece movedPiece = move.piece_after_move();
+
+    it->score = (*mainHistory)[move.from_to()][c] 
+              + 2 * (*continuationHistory_[0])[movedSq][movedPiece]
+              + 2 * (*continuationHistory_[1])[movedSq][movedPiece]
+              + 2 * (*continuationHistory_[3])[movedSq][movedPiece]
+              +     (*continuationHistory_[5])[movedSq][movedPiece]
+              + (ply_ < MAX_LPH ? 4 * (*lowPlyHistory)[ply_][move.from_to()] : 0);
   }
 }
 
 template<>
 void MovePicker::ScoreMoves<kEvasions>() {
+  const ButterflyHistory* mainHistory = search_.mainHistory_;
+  Color c = pos_.side_to_move();
+
   for (ExtMove* it = moves_.begin(); it != end_; ++it) {
     Move move = it->move;
-    Score swap_score = Swap::Evaluate(move, pos_);
-    if (swap_score < kScoreZero) {
-      it->score = swap_score - HistoryStats::kMax; // 末尾に
-    } else if (!move.is_quiet()) {
-      it->score = GetMvvLvaScore(move) + HistoryStats::kMax; // 先頭に
-      it->score += move.is_promotion();
+    if (move.is_capture()) {
+      it->score = GetMvvLvaScore(move);
     } else {
-      it->score = history_[move];
+      it->score = (*mainHistory)[move.from_to()][c] 
+                + (*continuationHistory_[0])[move.to()][move.piece_after_move()]
+                - (1 << 28);
     }
   }
 }
 
-void MovePicker::GenerateNext() {
+
+// -----------------------
+//   partial insertion sort
+// -----------------------
+
+// partial_insertion_sort()は指し手を与えられたlimitまで降順でソートする。
+// limitよりも小さい値の指し手の順序については、不定。
+// 将棋だと指し手の数が多い(ことがある)ので、数が多いときは途中で打ち切ったほうがいいかも。
+// 現状、全体時間の6.5～7.5%程度をこの関数で消費している。
+// (長い時間思考させるとこの割合が増えてくる)
+void partial_insertion_sort(ExtMove* begin, ExtMove* end, int limit) {
+
+	for (ExtMove *sortedEnd = begin, *p = begin + 1; p < end; ++p)
+		if (p->score >= limit)
+		{
+			ExtMove tmp = *p, *q;
+			*p = *++sortedEnd;
+			for (q = sortedEnd; q != begin && (*(q - 1)).score < tmp.score; --q)
+				*q = *(q - 1);
+			*q = tmp;
+		}
+}
+
+
+void MovePicker::GenerateNext(bool skipQuiets) {
   switch (++stage_) {
     case kProbability0: {
       cur_ = moves_.begin();
@@ -358,6 +410,7 @@ void MovePicker::GenerateNext() {
       return;
 
     case kKillers1:
+/*
       cur_ = killers_.begin();
       end_ = cur_ + 2;
 
@@ -383,21 +436,40 @@ void MovePicker::GenerateNext() {
           (end_++)->move = followupmove;
         }
       }
+*/
+
+      // refutations配列に対して繰り返すためにポインターを準備する。
+      cur_ = std::begin(refutations_);
+      end_ = std::end(refutations_);
+
+      // countermoveがkillerと同じならばそれをskipする。
+      if (   refutations_[0].move == refutations_[2].move
+          || refutations_[1].move == refutations_[2].move) {
+        --end_;
+      }
+
       return;
 
     case kGoodQuiets1:
-      cur_ = moves_.begin();
-      end_ = end_quiets_ = GenerateMoves<kQuiets>(pos_, cur_);
-      ScoreMoves<kQuiets>();
-      end_ = std::partition(cur_, end_, has_good_score);
-      SortMoves(cur_, end_);
+      if (!skipQuiets) {
+        cur_ = moves_.begin();
+        end_ = end_quiets_ = GenerateMoves<kQuiets>(pos_, cur_);
+        ScoreMoves<kQuiets>();
+
+        // TODO partial_insertion_sort
+        //end_ = std::partition(cur_, end_, has_good_score);
+        //SortMoves(cur_, end_);
+        partial_insertion_sort(cur_, end_, -3000 * depth_ / kOnePly);
+      }
       return;
 
     case kQuiets1:
-      cur_ = end_;
-      end_ = end_quiets_;
-      if (depth_ >= 3 * kOnePly) {
-        SortMoves(cur_, end_);
+      if (!skipQuiets) {
+        cur_ = end_;
+        end_ = end_quiets_;
+        //if (depth_ >= 3 * kOnePly) {
+          SortMoves(cur_, end_);
+        //}
       }
       return;
 

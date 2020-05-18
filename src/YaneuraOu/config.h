@@ -1,6 +1,7 @@
 ﻿#ifndef _CONFIG_H_INCLUDED
 #define _CONFIG_H_INCLUDED
 
+<<<<<<< HEAD
 #include <cstdint>
 #include "../types.h"
 
@@ -19,10 +20,13 @@
 #define USE_SSE2
 
 
+=======
+>>>>>>> origin/m
 // --------------------
 //      configure
 // --------------------
 
+<<<<<<< HEAD
 // どちらかをdefineする。
 //#define EVAL_NNUE_HALFKP
 #define EVAL_NNUE_HALFKPE9
@@ -32,6 +36,10 @@
 #define ENABLE_TEST_CMD
 //#define ASSERT_LV 5
 //#define USE_DEBUG_ASSERT
+=======
+// デバッグ用
+//#define ASSERT_LV 5
+>>>>>>> origin/m
 
 
 // --- assertion tools
@@ -64,4 +72,7 @@
 
 
 #endif // ifndef _CONFIG_H_INCLUDED
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/m

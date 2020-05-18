@@ -35,10 +35,13 @@ class HashEntry {
 
     /** ３手詰め関数をスキップすべきことを知らせるフラグです. */
     kSkipMate3 = 0x10,
+
+    /** PVであることを示すフラグです. */
+    kFlagPv = 0x20,
   };
 
   // flag_メンバ変数には、Boundも保存されるので、それとビットが重ならないようにする
-  static_assert((kSkipMate3 & kBoundExact) == 0, "");
+  static_assert((kSkipMate3 & kBoundExact & kFlagPv) == 0, "");
 
   /**
    * エントリが空であれば、trueを返します.
@@ -103,6 +106,13 @@ class HashEntry {
    */
   bool skip_mate3() const {
     return flags_ & kSkipMate3;
+  }
+
+  /**
+   * PVであればtrueを返します.
+   */
+  bool is_pv() const {
+    return flags_ & kFlagPv;
   }
 
   void set_age(uint8_t new_age) {

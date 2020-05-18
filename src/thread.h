@@ -66,6 +66,7 @@ class ThreadManager {
     return time_manager_;
   }
   void SetNumSearchThreads(size_t num_threads);
+  size_t GetNumSearchThreads();
   uint64_t CountNodesSearchedByWorkerThreads() const;
   uint64_t CountNodesUnder(Move move) const;
   RootMove ParallelSearch(Node& node, Score draw_score,
@@ -75,6 +76,7 @@ class ThreadManager {
   SharedData& shared_data_;
   TimeManager& time_manager_;
   std::vector<std::unique_ptr<SearchThread>> worker_threads_;
+  size_t num_search_threads_;
 };
 
 #endif /* THREAD_H_ */
