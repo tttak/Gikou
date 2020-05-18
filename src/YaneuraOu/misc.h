@@ -1,7 +1,6 @@
 ﻿#ifndef MISC_H_INCLUDED
 #define MISC_H_INCLUDED
 
-<<<<<<< HEAD
 //#include <chrono>
 //#include <vector>
 //#include <functional>
@@ -47,18 +46,13 @@ static void my_exit()
 }
 
 
-=======
->>>>>>> origin/m
 // --------------------
 //       Math
 // --------------------
 
 // 進行度の計算や学習で用いる数学的な関数
 namespace Math {
-<<<<<<< HEAD
 
-=======
->>>>>>> origin/m
 	// vを[lo,hi]の間に収まるようにクリップする。
 	// ※　Stockfishではこの関数、bitboard.hに書いてある。
 	template<class T> constexpr const T& clamp(const T& v, const T& lo, const T& hi) {
@@ -66,7 +60,6 @@ namespace Math {
 	}
 }
 
-<<<<<<< HEAD
 
 // --------------------
 //       Path
@@ -87,6 +80,4 @@ struct Path
 	}
 };
 
-=======
->>>>>>> origin/m
 #endif // #ifndef MISC_H_INCLUDED
