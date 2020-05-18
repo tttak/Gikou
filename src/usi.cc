@@ -38,7 +38,7 @@
 namespace {
 
 //const auto kProgramName = "Gikou 2 (v2.0.2)";
-const auto kProgramName = "Gikou 2 m";
+const auto kProgramName = "Gikou 2 m 20200518";
 
 const auto kAuthorName  = "Yosuke Demura";
 
