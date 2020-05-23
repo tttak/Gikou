@@ -122,7 +122,7 @@ int Reductions[MAX_MOVES]; // [depth or moveNumber]
 // improvingとは、評価値が2手前から上がっているかのフラグ。上がっていないなら
 // 悪化していく局面なので深く読んでも仕方ないからreduction量を心もち増やす。
 Depth reduction(bool i, Depth d, int mn) {
-  int r = Reductions[d] * Reductions[mn];
+  int r = Reductions[d / kOnePly] * Reductions[mn];
   return ((r + 511) / 1024 + (!i && r > 1007)) * kOnePly;
 }
 
