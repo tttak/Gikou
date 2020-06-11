@@ -676,7 +676,7 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   formerPv = ttPv && !kIsPv;
 
   if (ttPv && depth > 12 * kOnePly && ss->ply - 1 < MAX_LPH && !node.last_move().is_capture() && (ss - 1)->current_move.is_real_move()) {
-    (*this->lowPlyHistory_)[ss->ply - 1][(ss - 1)->current_move.from_to()] << stat_bonus(depth - 5);
+    (*this->lowPlyHistory_)[ss->ply - 1][(ss - 1)->current_move.from_to()] << stat_bonus(depth - 5 * kOnePly);
   }
 
   // thisThread->ttHitAverage can be used to approximate the running average of ttHit
@@ -701,7 +701,7 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
 
         // Stockfish相当のコード
         if ((ss - 1)->moveCount == 1 && !priorCapture) {
-          update_continuation_histories(ss - 1, node.piece_on(prevSq), prevSq, -stat_bonus(depth + 1));
+          update_continuation_histories(ss - 1, node.piece_on(prevSq), prevSq, -stat_bonus(depth + 1 * kOnePly));
         }
       }
 
@@ -1883,7 +1883,7 @@ void Search::update_quiet_stats(const Node& pos, Stack* ss, Move move, int bonus
   }
 
   if (depth > 12 * kOnePly && ss->ply < MAX_LPH) {
-    (*this->lowPlyHistory_)[ss->ply][move.from_to()] << stat_bonus(depth - 7);
+    (*this->lowPlyHistory_)[ss->ply][move.from_to()] << stat_bonus(depth - 7 * kOnePly);
   }
 }
 
