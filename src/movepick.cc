@@ -307,7 +307,7 @@ void MovePicker::ScoreMoves<kCaptures>() {
       it->score += Material::promotion_value(move.piece_type());
     }
     it->score = it->score * 6
-              + (*captureHistory)[move.to()][move.piece_after_move()][move.captured_piece_type()];
+              + (*captureHistory)[move.to()][move.piece_after_move()][move.captured_piece_type()][pos_.calcEffectIndexOfStats(move, false)];
   }
 }
 
@@ -322,13 +322,14 @@ void MovePicker::ScoreMoves<kQuiets>() {
 
     Square movedSq = move.to();
     Piece movedPiece = move.piece_after_move();
+    int effectIndexOfStats = pos_.calcEffectIndexOfStats(move, false);
 
-    it->score = (*mainHistory)[move.from_to()][c] 
+    it->score = (*mainHistory)[move.from_to()][c][effectIndexOfStats]
               + 2 * (*continuationHistory_[0])[movedSq][movedPiece]
               + 2 * (*continuationHistory_[1])[movedSq][movedPiece]
               + 2 * (*continuationHistory_[3])[movedSq][movedPiece]
               +     (*continuationHistory_[5])[movedSq][movedPiece]
-              + (ply_ < MAX_LPH ? 4 * (*lowPlyHistory)[ply_][move.from_to()] : 0);
+              + (ply_ < MAX_LPH ? 4 * (*lowPlyHistory)[ply_][move.from_to()][effectIndexOfStats] : 0);
   }
 }
 
@@ -342,7 +343,7 @@ void MovePicker::ScoreMoves<kEvasions>() {
     if (move.is_capture()) {
       it->score = GetMvvLvaScore(move);
     } else {
-      it->score = (*mainHistory)[move.from_to()][c] 
+      it->score = (*mainHistory)[move.from_to()][c][pos_.calcEffectIndexOfStats(move, false)]
                 + (*continuationHistory_[0])[move.to()][move.piece_after_move()]
                 - (1 << 28);
     }

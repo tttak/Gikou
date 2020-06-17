@@ -190,6 +190,11 @@ class Position {
   int num_controls(Color c, Square s) const;
 
   /**
+   * １手前の局面における、指定されたマスに付けられた、指定された手番側の利き数を返します.
+   */
+  int previous_num_controls(Color c, Square s) const;
+
+  /**
    * 指定されたマスに付けられた、指定された手番側の長い利きの方向を返します.
    */
   DirectionSet long_controls(Color c, Square s) const;
@@ -463,6 +468,11 @@ class Position {
    */
   void Print(Move move = kMoveNone) const;
 
+  /**
+   * Stats用の駒の利きのインデックスを算出して返します.
+   */
+  int calcEffectIndexOfStats(Move move, bool previous) const;
+
  private:
 
   struct StateInfo {
@@ -590,6 +600,10 @@ inline bool Position::square_is_attacked(Color c, Square s) const {
 
 inline int Position::num_controls(Color c, Square s) const {
   return current_state_info_->extended_board.num_controls(c, s);
+}
+
+inline int Position::previous_num_controls(Color c, Square s) const {
+  return (current_state_info_ - 1)->extended_board.num_controls(c, s);
 }
 
 inline DirectionSet Position::long_controls(Color c, Square s) const {

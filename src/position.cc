@@ -1125,3 +1125,123 @@ Bitboard Position::ComputeObstructingPieces(Color king_color) const {
 
   return obstructing_pieces;
 }
+
+// fromから見たtoのDirectionを算出
+// ・前提：fromとtoが一直線上にあること
+Direction calcDirection(Square from, Square to) {
+  int fileDiff = int(to.file() - from.file());
+  int rankDiff = int(to.rank() - from.rank());
+
+  if (fileDiff == 0) {
+    if (rankDiff == 0) {
+      // ありえないはずだが、kDirSを返しておく。
+      return kDirS;
+    }
+    else if (rankDiff > 0) {
+      return kDirS;
+    }
+    else {
+      return kDirN;
+    }
+  }
+  else if (fileDiff > 0) {
+    if (rankDiff == 0) {
+      return kDirW;
+    }
+    else if (rankDiff > 0) {
+      return kDirSW;
+    }
+    else {
+      return kDirNW;
+    }
+  }
+  else {
+    if (rankDiff == 0) {
+      return kDirE;
+    }
+    else if (rankDiff > 0) {
+      return kDirSE;
+    }
+    else {
+      return kDirNE;
+    }
+  }
+}
+
+// Stats用の駒の利きのインデックスを算出して返す
+// ・0～15を返す。
+// ・fromとtoのマスへの駒の利きの有無（手番側/相手側）を元に算出する。
+int Position::calcEffectIndexOfStats(Move move, bool previous) const {
+  bool hasEffect_from_us;
+  bool hasEffect_from_them;
+  bool hasEffect_to_us;
+  bool hasEffect_to_them;
+
+  Color perspective = previous ? ~side_to_move_ : side_to_move_;
+  Square toSq = move.to();
+
+  if (previous && game_ply() > 0) {
+    if (move.is_drop()) {
+      hasEffect_from_us   = false;
+      hasEffect_from_them = false;
+      hasEffect_to_us     = (this->num_controls( perspective, toSq) > 0);
+      hasEffect_to_them   = (this->num_controls(~perspective, toSq) > 0);
+    }
+    else {
+      Square fromSq = move.from();
+      hasEffect_from_us   = (this->previous_num_controls( perspective, fromSq) > 0);
+      hasEffect_from_them = (this->previous_num_controls(~perspective, fromSq) > 0);
+      hasEffect_to_us     = (this->num_controls         ( perspective, toSq  ) > 0);
+      hasEffect_to_them   = (this->num_controls         (~perspective, toSq  ) > 0);
+    }
+  }
+  else {
+    if (move.is_drop()) {
+      hasEffect_from_us   = false;
+      hasEffect_from_them = false;
+      hasEffect_to_us     = (this->num_controls( perspective, toSq) > 0);
+      hasEffect_to_them   = (this->num_controls(~perspective, toSq) > 0);
+    }
+    else {
+      Square fromSq = move.from();
+      hasEffect_from_us   = (this->num_controls( perspective, fromSq) > 0);
+      hasEffect_from_them = (this->num_controls(~perspective, fromSq) > 0);
+
+      // ----- hasEffect_to_usの導出
+      if (this->num_controls(perspective, toSq) > 1) {
+        hasEffect_to_us = true;
+      }
+      else {
+        const DirectionSet ds_long_controls = this->long_controls(perspective, fromSq);
+        if (ds_long_controls.none() || move.piece() == kKnight) {
+          hasEffect_to_us = false;
+        }
+        else {
+          Direction dir_from_to = calcDirection(fromSq, toSq);
+          hasEffect_to_us = ds_long_controls.test(dir_from_to);
+        }
+      }
+
+      // ----- hasEffect_to_themの導出
+      if (this->num_controls(~perspective, toSq) > 0) {
+        hasEffect_to_them = true;
+      }
+      else {
+        const DirectionSet ds_long_controls = this->long_controls(~perspective, fromSq);
+        if (ds_long_controls.none() || move.piece() == kKnight) {
+          hasEffect_to_them = false;
+        }
+        else {
+          Direction dir_from_to = calcDirection(fromSq, toSq);
+          hasEffect_to_them = ds_long_controls.test(dir_from_to);
+        }
+      }
+    }
+  }
+
+  return     hasEffect_from_us
+      + 2 * (hasEffect_from_them
+      + 2 * (hasEffect_to_us
+      + 2 * (hasEffect_to_them
+      )));
+}

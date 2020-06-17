@@ -676,7 +676,7 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
   formerPv = ttPv && !kIsPv;
 
   if (ttPv && depth > 12 * kOnePly && ss->ply - 1 < MAX_LPH && !node.last_move().is_capture() && (ss - 1)->current_move.is_real_move()) {
-    (*this->lowPlyHistory_)[ss->ply - 1][(ss - 1)->current_move.from_to()] << stat_bonus(depth - 5 * kOnePly);
+    (*this->lowPlyHistory_)[ss->ply - 1][(ss - 1)->current_move.from_to()][node.calcEffectIndexOfStats((ss - 1)->current_move, true)] << stat_bonus(depth - 5 * kOnePly);
   }
 
   // thisThread->ttHitAverage can be used to approximate the running average of ttHit
@@ -708,7 +708,7 @@ Score Search::MainSearch(Node& node, Score alpha, Score beta, const Depth depth,
       // Stockfish相当のコード
       else if (!hash_move.is_capture_or_promotion()) {
         int penalty = -stat_bonus(depth);
-        (*this->mainHistory_)[hash_move.from_to()][us] << penalty;
+        (*this->mainHistory_)[hash_move.from_to()][us][node.calcEffectIndexOfStats(hash_move, false)] << penalty;
         update_continuation_histories(ss, hash_move.piece_after_move(), hash_move.to(), penalty);
       }
     }
@@ -959,7 +959,7 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
                                        nullptr                      , (ss - 6)->continuationHistory };
 
   Piece prevPc = node.piece_on(prevSq);
-  Move countermove = (*this->counterMoves_)[prevSq][prevPc];
+  Move countermove = (*this->counterMoves_)[prevSq][prevPc][node.calcEffectIndexOfStats((ss - 1)->current_move, true)];
 
   MovePicker move_picker(node, history_, gains_, depth, hash_move,
                          //ss->killers, countermoves, followupmoves, ss);
@@ -1087,7 +1087,7 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
         // Capture history based pruning when the move doesn't give check
         if (!move_gives_check
           && lmrDepth < 1 * kOnePly
-          && (*this->captureHistory_)[movedSq][movedPiece][move.captured_piece_type()] < 0)
+          && (*this->captureHistory_)[movedSq][movedPiece][move.captured_piece_type()][node.calcEffectIndexOfStats(move, false)] < 0)
           continue;
 
         // See based pruning
@@ -1304,7 +1304,7 @@ moves_loop: // 王手がかかっている場合は、ここからスタート�
           reduction_depth += 2 * kOnePly;
 
         // 【計測資料 11.】statScoreの計算でcontHist[3]も調べるかどうか。
-        ss->statScore = (*this->mainHistory_)[move.from_to()][us]
+        ss->statScore = (*this->mainHistory_)[move.from_to()][us][node.calcEffectIndexOfStats(move, true)]
           + (*contHist[0])[movedSq][movedPiece]
           + (*contHist[1])[movedSq][movedPiece]
           + (*contHist[3])[movedSq][movedPiece]
@@ -1828,12 +1828,12 @@ void Search::update_all_stats(const Node& pos, Stack* ss, Move bestMove, Score b
     // Decrease all the non-best quiet moves
     for (int i = 0; i < quietCount; ++i) {
       Move move = quietsSearched[i];
-      (*this->mainHistory_)[move.from_to()][us] << -bonus2;
+      (*this->mainHistory_)[move.from_to()][us][pos.calcEffectIndexOfStats(move, false)] << -bonus2;
       update_continuation_histories(ss, move.piece_after_move(), move.to(), -bonus2);
     }
   }
   else {
-    captureHistory[bestMove.to()][bestMove.piece_after_move()][bestMove.captured_piece_type()] << bonus1;
+    captureHistory[bestMove.to()][bestMove.piece_after_move()][bestMove.captured_piece_type()][pos.calcEffectIndexOfStats(bestMove, false)] << bonus1;
   }
 
   // Extra penalty for a quiet TT or main killer move in previous ply when it gets refuted
@@ -1846,7 +1846,7 @@ void Search::update_all_stats(const Node& pos, Stack* ss, Move bestMove, Score b
   for (int i = 0; i < captureCount; ++i)
   {
     Move move = capturesSearched[i];
-    captureHistory[move.to()][move.piece_after_move()][move.captured_piece_type()] << -bonus1;
+    captureHistory[move.to()][move.piece_after_move()][move.captured_piece_type()][pos.calcEffectIndexOfStats(move, false)] << -bonus1;
   }
 }
 
@@ -1874,16 +1874,16 @@ void Search::update_quiet_stats(const Node& pos, Stack* ss, Move move, int bonus
   Color us = pos.side_to_move();
 
   // historyのupdate
-  (*this->mainHistory_)[move.from_to()][us] << bonus;
+  (*this->mainHistory_)[move.from_to()][us][pos.calcEffectIndexOfStats(move, false)] << bonus;
   update_continuation_histories(ss, move.piece_after_move(), move.to(), bonus);
 
   if ((ss - 1)->current_move.is_real_move()) {
     Move m = (ss - 1)->current_move;
-    (*this->counterMoves_)[m.to()][m.piece_after_move()] = move;
+    (*this->counterMoves_)[m.to()][m.piece_after_move()][pos.calcEffectIndexOfStats(m, true)] = move;
   }
 
   if (depth > 12 * kOnePly && ss->ply < MAX_LPH) {
-    (*this->lowPlyHistory_)[ss->ply][move.from_to()] << stat_bonus(depth - 7 * kOnePly);
+    (*this->lowPlyHistory_)[ss->ply][move.from_to()][pos.calcEffectIndexOfStats(move, false)] << stat_bonus(depth - 7 * kOnePly);
   }
 }
 
