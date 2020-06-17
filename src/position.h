@@ -471,6 +471,11 @@ class Position {
    */
   void Print(Move move = kMoveNone) const;
 
+  /**
+   * Stats用の駒の利きのインデックスを算出して返します.
+   */
+  int calcEffectIndexOfStats(Move move, bool previous) const;
+
  //private:
 
   struct StateInfo {
